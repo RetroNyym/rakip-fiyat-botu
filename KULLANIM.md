@@ -278,8 +278,9 @@ pytest -q                           # isteğe bağlı
 
 - Testler **internete çıkmaz**; yerel bir HTTP sunucusu kurup sayfayı
   oradan okur. Bu yüzden `--config` dosyana dokunmadan koşar.
-- 94 test: fiyat ayrıştırma, config (BOM), SQLite, robots.txt, tarama
-  akışı (ilk/değişti/değişmedi), Telegram, arayüz ve CLI.
+- 97 test: fiyat ayrıştırma, config (BOM), SQLite, robots.txt, tarama
+  akışı (ilk/değişti/değişmedi), Telegram, arayüz, CLI ve "Seçici Bul"
+  penceresinin uçtan uca akışı.
 - GitHub'a her push'ta aynı testler `.github/workflows/test.yml` ile
   Windows ve Linux üzerinde otomatik koşar.
 

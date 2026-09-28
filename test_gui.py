@@ -396,6 +396,86 @@ class GuiTesti(unittest.TestCase):
         self.app.ayar["ayarlar"]["esik_yuzde"] = deger
         self.app._config_kaydet()
 
+    # ------------------------------------------------------------------
+    #  Ana kuyruk (_ana_kuyruk) sözleşmesi
+    # ------------------------------------------------------------------
+    def test_ana_kuyruk_islevi_calisir(self):
+        """`_ana_kuyruk` üzerindeki sözleşme: `islev(veri)` çağrılır."""
+        isaret = []
+        self.app._ana_kuyruk.put((lambda _v: isaret.append(_v), "veri-degeri"))
+        self.app._kuyruk_isle()
+        self.assertEqual(isaret, ["veri-degeri"])
+
+    def test_kotu_islev_donguyu_oldurmez(self):
+        """Bozuk tek bir işlev arka plan döngüsünü kalıcı olarak durdurmamalı.
+
+        Eskiden `islev(veri)` try/except dışında idi; istisna `after(...)`
+        çağrısına da sıçrar, konsol/grafik/rapor güncellemeleri sonsuza dek
+        dururdu (GUI ses vermeden donardı).
+        """
+        def patlak(_v=None):
+            raise RuntimeError("kasitli test hatasi")
+
+        self.app._ana_kuyruk.put((patlak, None))
+        self.app._kuyruk_isle()          # istisna dışarı sıçramamalı
+
+        # döngü hâlâ çalışır durumda olmalı
+        isaret = []
+        self.app._ana_kuyruk.put((lambda _v=None: isaret.append(1), None))
+        self.app._kuyruk_isle()          # hata konsola düşer, akış sürer
+
+        self.assertEqual(isaret, [1], "döngü durmuş")
+        icerik = self.app.konsol.get("1.0", "end")
+        self.assertIn("kasitli test hatasi", icerik)
+        self.assertIn("arayüz işlevi çalıştırılamadı", icerik)
+
+    def test_seci_bul_sonuclari_listelenir(self):
+        """Seçici Bul penceresi sonuçları ana döngü üzerinden listelemeli.
+
+        Regresyon: `SeciciPenceresi._baslat` sıfır argümanlı bir lambda
+        kuyruğa atıyordu; `islev(veri)` TypeError fırlatıyor ve aday listesi
+        hiç dolmuyordu.
+        """
+        import time
+
+        from test_rakip_takip import YerelSunucu
+
+        sunucu = YerelSunucu({
+            "/urun": ("text/html; charset=utf-8",
+                      "<html><body>"
+                      "<span class='price'>4.900,50 TL</span>"
+                      "</body></html>"),
+        })
+        p = None
+        try:
+            yazici = gui.KuyrukYazici(self.app.kuyruk)
+            p = gui.SeciciPenceresi(
+                self.app, sunucu.url("/urun"), yazici,
+                lambda islev: self.app._ana_kuyruk.put((islev, None)))
+
+            p._baslat()                       # arka thread'i başlat
+
+            son = time.time() + 15
+            while time.time() < son and not p.agac.get_children():
+                self.app.update()
+                self.app._kuyruk_isle()
+                time.sleep(0.05)
+
+            cocuk = p.agac.get_children()
+            self.assertTrue(cocuk, "aday listesi hiç dolmadı")
+            degerler = p.agac.item(cocuk[0], "values")
+            self.assertIn("span.price", degerler)
+            self.assertIn("4.900,50 TL", degerler)
+            self.assertFalse(p.tara_btn.instate(["disabled"]),
+                             "düğme tekrar aktifleşmedi")
+        finally:
+            if p is not None:
+                try:
+                    p.destroy()
+                except Exception:            # noqa: BLE001
+                    pass
+            sunucu.kapat()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

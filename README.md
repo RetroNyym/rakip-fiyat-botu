@@ -142,8 +142,8 @@ rakip-fiyat-botu/
 ├── config.ornek.json # Şablon — ilk açılışta config.json buna kopyalanır
 ├── requirements.txt  # Çalışma bağımlılıkları
 ├── requirements.gelistirme.txt  # Test/CI bağımlılıkları
-├── test_rakip_takip.py   # Çekirdek testleri (94 durum)
-├── test_gui.py           # Arayüz duman testleri
+├── test_rakip_takip.py   # Çekirdek testleri (58 durum)
+├── test_gui.py           # Arayüz duman + regresyon testleri (39 durum)
 ├── baslat.bat        # Arayüzü başlat (çift tık)
 ├── tarama.bat        # Zamanlanmış CLI taraması
 ├── .github/workflows/test.yml  # Her push'ta otomatik test

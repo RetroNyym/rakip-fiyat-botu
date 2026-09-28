@@ -385,7 +385,8 @@ class SeciciPenceresi(tk.Toplevel):
             except Exception as hata:
                 sonuclar = []
                 self._yazici(f"[!] {hata}")
-            self._is_bitir(lambda: self._doldur(sonuclar))
+            # kuyruk üzerindeki islev(veri) imzasıyla uyumlu olsun
+            self._is_bitir(lambda _v=None: self._doldur(sonuclar))
 
         threading.Thread(target=is_calistir, daemon=True).start()
 
@@ -926,7 +927,13 @@ class Uygulama(tk.Tk):
                 islev, veri = self._ana_kuyruk.get_nowait()
             except (queue.Empty, AttributeError):
                 break
-            islev(veri)
+            try:
+                islev(veri)
+            except Exception as hata:                # noqa: BLE001
+                # Tek bir kötü işlev tüm arka plan döngüsünü öldürmemeli:
+                # eskiden bu istisna after() çağrısına da sıçrar, kuyruk
+                # boşaltma + grafik/rapor güncellemeleri kalıcı olarak dururdu.
+                self.konsol_yaz(f"[!] arayüz işlevi çalıştırılamadı: {hata}")
 
         try:
             self.after(120, self._kuyruk_isle)
