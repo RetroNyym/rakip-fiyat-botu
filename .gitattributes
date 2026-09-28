@@ -1,0 +1,16 @@
+* text=auto
+
+# Windows betikleri CRLF ister — aksi halde cmd.exe bozuk yorumlayabilir
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# İkili dosyalar
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.db binary
+
+# Windows'a özgü
+*.lnk binary

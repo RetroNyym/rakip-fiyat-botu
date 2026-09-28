@@ -1,0 +1,7 @@
+# Geliştirme / test için ekstra bağımlılıklar.
+# Kurulum:  pip install -r requirements.txt -r requirements.gelistirme.txt
+-r requirements.txt
+
+pytest>=8.0
+Pillow>=10.0
+matplotlib>=3.8

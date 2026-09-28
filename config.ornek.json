@@ -1,0 +1,16 @@
+{
+  "ayarlar": {
+    "bekleme_saniye": 3,
+    "esik_yuzde": 0,
+    "telegram_token": "",
+    "telegram_chat_id": ""
+  },
+  "urunler": [
+    {
+      "ad": "Örnek - Halı 200x300 Yün",
+      "url": "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html",
+      "selector": "p.price_color",
+      "not": "Örnek kayıt. Gerçek rakip URL'nizle değiştirin. selector boş bırakılırsa sayfa otomatik taranır."
+    }
+  ]
+}

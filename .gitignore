@@ -1,0 +1,68 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- Sanal ortam ---
+venv/
+env/
+.venv/
+ENV/
+
+# --- Gizli / sistem ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# --- Editör / IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- Test ve geçici çıktılar ---
+# (Depoya giren resmi test dosyaları: test_*.py — bunlar HİÇ ignora edilmez)
+_test_*.py
+_test*.py
+_ekran_*.png
+_v[0-9]_*.png
+*.log
+log.txt
+.pytest_cache/
+.coverage
+htmlcov/
+
+# --- Kişisel veri (asla yayınlanmasın) ---
+# Fiyat geçmişi
+fiyatlar.db
+fiyatlar.db-journal
+fiyatlar.db-wal
+fiyatlar.db-shm
+
+# Telegram token'ı ve chat ID içerebilir → yayınlanmaz.
+# Şablon için: config.ornek.json (bu depoda), gerçek dosya: config.json
+config.json
+
+# İndirilen görseller
+.gorseller/
+.cache/
+
+# --- Zamanlayıcı çıktısı ---
+zamanlama_tarama.bat
