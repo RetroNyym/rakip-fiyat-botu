@@ -19,6 +19,8 @@
 | 🔍 **Tarama** | `config.json`'daki rakip ürün sayfalarını gezer, fiyatı çeker |
 | 📈 **Geçmiş** | Her günün fiyatını SQLite'a yazar → geçmiş + grafik oluşur |
 | 🔔 **Uyarı** | Fiyat değişince Telegram'a mesaj atar |
+| 🧭 **Rakip Radar** | Pazaryerlerinde satıcı listesi: pazar payı, yorum, tahmini ciro + lider tablosu |
+| 🌍 **İthalat Radarı** | Rakibinin tedarikçilerini ABD ithalat kayıtlarından (ImportYeti) keşfeder |
 | 🧭 **Seçici bul** | Fiyatın CSS seçicisini sayfadan otomatik keşfeder |
 | 🖼 **Görsel** | Rakip ürününün görselini arayüzde gösterir |
 | 📊 **Rapor** | En düşük / en yüksek / toplam değişim / dalgalanma aralığı |
@@ -42,6 +44,10 @@
 | Arayüz | Fiyat geçmişi + grafik |
 |---|---|
 | ![GUI](docs/gui.png) | ![Geçmiş](docs/gecmis.png) |
+
+**🌍 İthalat Radarı** — tedarikçi/müşteri keşfi (ABD ithalat kayıtları):
+
+![İthalat Radarı](docs/ithalat.png)
 
 ---
 
@@ -144,10 +150,14 @@ rakip-fiyat-botu/
 ├── requirements.gelistirme.txt  # Test/CI bağımlılıkları
 ├── test_rakip_takip.py   # Çekirdek testleri (58 durum)
 ├── test_gui.py           # Arayüz duman + regresyon testleri (39 durum)
+├── test_ithalat_radar.py # İthalat Radarı ayrıştırma testleri (offline)
 ├── baslat.bat        # Arayüzü başlat (çift tık)
 ├── tarama.bat        # Zamanlanmış CLI taraması
+├── pazaryeri-radar/  # 🏆 Rakip Radar modülü (satıcı toplama + rapor)
+├── ithalat-radar/    # 🌍 İthalat Radarı modülü (ImportYeti istemcisi)
 ├── .github/workflows/test.yml  # Her push'ta otomatik test
 ├── KULLANIM.md       # Türkçe kullanım kılavuzu
+├── REHBER.md         # Buton buton arayüz rehberi (docs/rehber/ görselleriyle)
 ├── docs/             # Ekran görüntüleri
 └── fiyatlar.db       # SQLite fiyat geçmişi (oluşturulur, git'e girmez)
 ```
@@ -181,6 +191,7 @@ Ne kapsanıyor:
 | Tarama (uçtan uca) | ilk kayıt / değişti / değişmedi / fiyat yok / robots.txt |
 | Telegram | token yokken **ağ çağrısı yapmadan** `False` |
 | Arayüz | liste + canlı arama, seçim, geçmiş, grafik, rapor, CSV, konsol |
+| İthalat Radarı | HTML/JSON ayrıştırma örnek dosyalarla **ağsız** test edilir |
 | CLI | `--help`, hata kodları, eksik config mesajı |
 
 CI (GitHub Actions) her push'ta **2 işletim sistemi × 3 Python sürümü**

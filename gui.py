@@ -34,6 +34,7 @@ import threading
 import traceback
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote, urlparse
 from tkinter import (
     BOTH, END, LEFT, RIGHT, X, Y, BOTTOM, TOP, W, E, N, S, CENTER,
     BooleanVar, DoubleVar, IntVar, StringVar, TclError,
@@ -87,39 +88,82 @@ def radar_python_bul(kok: Path) -> Path:
     return Path(sys.executable)
 
 
+def ithalat_kok_bul() -> Path:
+    """ithalat-radar proje kökünü bulur (yanında ya da üst klasörde)."""
+    kendi = Path(__file__).resolve().parent
+    for taban in (kendi, kendi.parent):
+        aday = taban / "ithalat-radar"
+        if (aday / "ithalat").is_dir():
+            return aday
+    return kendi / "ithalat-radar"
+
+
 # ==========================================================================
-#  Stil
+#  Stil — FiyatAvcısı tarzı karanlık tema (lacivert + camgöbeği vurgu)
 # ==========================================================================
 RENKLER = {
-    "arka":        "#f4f6f9",
-    "panel":       "#ffffff",
-    "baslik":      "#1f2a44",
-    "vurgu":       "#2563eb",
-    "vurgu_koyu":  "#1d4ed8",
-    "yesil":       "#16a34a",
-    "kirmizi":     "#dc2626",
-    "sari":        "#d97706",
-    "gri":         "#64748b",
-    "kenar":       "#dbe1ea",
+    "arka":        "#0a0f1c",   # pencere arka planı
+    "panel":       "#0f1729",   # panel / diyalog arka planı
+    "kart":        "#111c33",   # canlı panel ürün kartları
+    "koyu":        "#0d1526",   # alan (entry/treeview) arka planı
+    "baslik":      "#e8eefc",   # başlık yazısı
+    "metin":       "#9db0d0",   # normal yazı
+    "vurgu":       "#22d3ee",   # camgöbeği vurgu
+    "vurgu_koyu":  "#0e7490",
+    "yesil":       "#34d399",
+    "kirmizi":     "#f87171",
+    "sari":        "#fbbf24",
+    "mor":         "#818cf8",
+    "gri":         "#6b7c9c",
+    "kenar":       "#22304f",   # kenarlık / çizgi
+    "buton":       "#1b2740",   # normal buton
+    "buton_act":   "#27365a",
+    "baslik_bant": "#0c1424",   # başlık/alt bant
+}
+
+# Rozet (rozet) renkleri — kart rozetleri ve durum satırları için
+ROZET = {
+    "yesil": ("#0b2b22", "#34d399"),   # fiyat düştü / sorunsuz
+    "kirmizi": ("#3b1113", "#fca5a5"),  # fiyat arttı
+    "cyan": ("#0b3a47", "#67e8f9"),     # sabit fiyat
+    "sari": ("#3a2c0b", "#fcd34d"),     # alarm / fiyat yok
+    "gri": ("#1b2436", "#94a3b8"),      # beklemede
+    "mor": ("#1e1b4b", "#a5b4fc"),      # ilk kayıt
 }
 
 STIL = """
 .TTk.TFrame { background: %(arka)s; }
 .TPanel.TFrame { background: %(panel)s; }
-.TLabelframe { background: %(panel)s; bordercolor: %(kenar)s; }
-.TLabelframe.Label { background: %(panel)s; foreground: %(baslik)s;
-                     font: ("Segoe UI", 10, "bold"); }
-.TLabel { background: %(panel)s; foreground: #33415c;
+.TLabel { background: %(arka)s; foreground: %(metin)s;
           font: ("Segoe UI", 10); }
-.TEntry { font: ("Segoe UI", 10); }
-.TButton { font: ("Segoe UI", 10); padding: 4 6; }
-.TNotebook { background: %(arka)s; }
-.TNotebook.Tab { font: ("Segoe UI", 10); padding: 6 4; }
-.Treeview { font: ("Segoe UI", 10); rowheight: 24; }
-.Treeview.Heading { font: ("Segoe UI", 10, "bold"); background: #e8edf5; }
-.TStatus.TLabel { background: #e8edf5; foreground: %(baslik)s;
-                  font: ("Segoe UI", 9); padding: 4 6; }
+.TButton { font: ("Segoe UI", 9, "bold"); padding: 6 6; }
+.TNotebook { background: %(arka)s; borderwidth: 0; }
+.TNotebook.Tab { font: ("Segoe UI", 9, "bold"); padding: 10 6; }
+.Treeview { font: ("Segoe UI", 10); rowheight: 25; }
+.Treeview.Heading { font: ("Segoe UI", 9, "bold"); }
+.Status.TLabel { background: %(baslik_bant)s; foreground: %(metin)s;
+                 font: ("Segoe UI", 9); padding: 6 6; }
 """ % RENKLER
+
+# --- sol panel alan seçenekleri ------------------------------------------
+URL_IPUCU = "Trendyol / Hepsiburada / Amazon ürün linki"
+PERIYOT_DEGERLER = ["Tek Seferlik Tarama", "5 Dakikada Bir",
+                    "15 Dakikada Bir", "30 Dakikada Bir",
+                    "60 Dakikada Bir"]
+PERIYOT_DAKIKA = [0, 5, 15, 30, 60]
+ESIK_DEGERLER = ["Her Fiyat Değişimde", "%2 Üzeri Değişimde",
+                 "%5 Üzeri Değişimde", "%10 Üzeri Değişimde"]
+ESIK_YUZDE = [0.0, 2.0, 5.0, 10.0]
+BILDIRIM_DEGERLER = ["Telegram & Konsol", "Sadece Konsol"]
+BILDIRIM_ANAHTAR = ["telegram", "konsol"]
+
+
+def _indeks(degerler: list, deger, varsayilan: int = 0) -> int:
+    """Listede degeri bulur; yoksa varsayilan indeksi döndürür."""
+    try:
+        return degerler.index(deger)
+    except ValueError:
+        return varsayilan
 
 
 # ==========================================================================
@@ -158,6 +202,7 @@ class UrunPenceresi(tk.Toplevel):
         super().__init__(ebeveyn)
         self.title(baslik)
         self.resizable(False, False)
+        self.configure(bg=RENKLER["arka"])
         self.transient(ebeveyn)
         self.grab_set()
         self.sonuc: dict | None = None
@@ -238,6 +283,7 @@ class AyarlarPenceresi(tk.Toplevel):
         super().__init__(ebeveyn)
         self.title("Ayarlar")
         self.resizable(False, False)
+        self.configure(bg=RENKLER["arka"])
         self.transient(ebeveyn)
         self.grab_set()
         self.sonuc: dict | None = None
@@ -326,6 +372,7 @@ class SeciciPenceresi(tk.Toplevel):
         self.title("Seçici Bul — fiyatın CSS seçicisini keşfet")
         self.geometry("760x520")
         self.minsize(620, 400)
+        self.configure(bg=RENKLER["arka"])
         self.transient(ebeveyn)
         self.secilen: str | None = None
         self._yazici = yazici
@@ -418,15 +465,17 @@ class SeciciPenceresi(tk.Toplevel):
 class Uygulama(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Rakip Fiyat Takip Botu")
-        self.geometry("1280x840")
-        self.minsize(1020, 680)
+        self.title("Fiyat Takip Botu — Pazaryeri Rakip Fiyat Takip")
+        self.geometry("1340x900")
+        self.minsize(1080, 850)
         self.configure(bg=RENKLER["arka"])
 
         # --- durum ---
         self.app_yolu = cekirdek.VARSAYILAN_CONFIG
         self.ayar = self._config_yukle()
         self.tarama_suriyor = False
+        self.otomatik_takip = False          # büyük başlat/durdur butonu
+        self._periyot_zamanlayici = None     # after() kimliği
         self.iptal_bayragi = threading.Event()
         self.kuyruk: "queue.Queue[str]" = queue.Queue()
         self.gorsel_ref = None          # PhotoImage referansı (GC'ye karşı)
@@ -439,34 +488,118 @@ class Uygulama(tk.Tk):
         self.radar_sonuc: dict | None = None
         self.gorsel_gosteriliyor = False
 
-        # --- stil ---
+        # --- stil (karanlık tema) ---
         self.stil = ttk.Style(self)
         try:
             self.stil.theme_use("clam")
         except TclError:
             pass
-        self.stil.configure(".", font=("Segoe UI", 10))
-        self.stil.configure("TFrame", background=RENKLER["arka"])
-        self.stil.configure("TLabel", background=RENKLER["arka"])
-        self.stil.configure("TButton", font=("Segoe UI", 10))
-        self.stil.configure("Status.TLabel", background="#e8edf5",
-                            foreground=RENKLER["baslik"])
-        self.stil.configure("Treeview", font=("Segoe UI", 10), rowheight=25)
-        self.stil.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"),
-                            background="#e8edf5")
-        self.stil.map("Treeview", background=[("selected", RENKLER["vurgu"])],
-                      foreground=[("selected", "#ffffff")])
+        self._stil_kur()
 
         self._menu_kur()
         self.grid_rowconfigure(1, weight=1)
         self.grid_columnconfigure(0, weight=1)
-        self._arac_cubugu()
+        self._baslik_cubugu()
         self._govde()
         self._durum_cubugu()
 
         self.liste_doldur()
+        self._alanlari_yukle()
         self._kuyruk_isle()
         self.protocol("WM_DELETE_WINDOW", self._kapat)
+
+    def _stil_kur(self) -> None:
+        """ttk stillerini karanlık palete göre yapılandırır."""
+        r = RENKLER
+        s = self.stil
+        s.configure(".", font=("Segoe UI", 10), background=r["arka"],
+                    foreground=r["metin"])
+        s.configure("TFrame", background=r["arka"])
+        s.configure("TPanel.TFrame", background=r["panel"])
+        s.configure("TLabel", background=r["arka"], foreground=r["metin"],
+                    font=("Segoe UI", 10))
+        s.configure("TPanel.TLabel", background=r["panel"],
+                    foreground=r["metin"])
+        s.configure("Alan.TLabel", background=r["arka"], foreground=r["gri"],
+                    font=("Segoe UI", 8, "bold"))
+        s.configure("TButton", background=r["buton"], foreground=r["baslik"],
+                    bordercolor=r["kenar"], focusthickness=1,
+                    focuscolor=r["vurgu"], padding=(10, 5),
+                    font=("Segoe UI", 9, "bold"))
+        s.map("TButton",
+              background=[("active", r["buton_act"]), ("disabled", "#141d31")],
+              foreground=[("disabled", "#4b5a78")])
+        s.configure("Baslat.TButton", background=r["vurgu"],
+                    foreground="#06121f", bordercolor=r["vurgu"],
+                    font=("Segoe UI", 11, "bold"), padding=(16, 10))
+        s.map("Baslat.TButton", background=[("active", "#67e8f9"),
+                                            ("disabled", "#123c4a")],
+              foreground=[("disabled", "#3e6b77")])
+        s.configure("Durdur.TButton", background="#7f1d1d",
+                    foreground="#fecaca", bordercolor="#991b1b",
+                    font=("Segoe UI", 11, "bold"), padding=(16, 10))
+        s.map("Durdur.TButton", background=[("active", "#991b1b")])
+        s.configure("TEntry", fieldbackground=r["koyu"],
+                    foreground=r["baslik"], insertcolor=r["baslik"],
+                    bordercolor=r["kenar"], lightcolor=r["kenar"],
+                    padding=6, font=("Segoe UI", 10))
+        s.configure("TSpinbox", fieldbackground=r["koyu"],
+                    foreground=r["baslik"], arrowcolor=r["vurgu"],
+                    bordercolor=r["kenar"], padding=4)
+        s.configure("TCombobox", fieldbackground=r["koyu"],
+                    background=r["buton"], foreground=r["baslik"],
+                    arrowcolor=r["vurgu"], bordercolor=r["kenar"],
+                    padding=3, font=("Segoe UI", 10, "bold"))
+        s.map("TCombobox",
+              fieldbackground=[("readonly", r["koyu"])],
+              foreground=[("readonly", r["baslik"])],
+              selectbackground=[("readonly", r["koyu"])],
+              selectforeground=[("readonly", r["baslik"])])
+        s.configure("TCheckbutton", background=r["arka"],
+                    foreground=r["metin"], font=("Segoe UI", 9))
+        s.map("TCheckbutton", background=[("active", r["arka"])])
+        s.configure("Treeview", background=r["koyu"],
+                    fieldbackground=r["koyu"], foreground=r["metin"],
+                    rowheight=25, font=("Segoe UI", 10))
+        s.configure("Treeview.Heading", background="#16213c",
+                    foreground=r["baslik"], relief="flat",
+                    padding=6, font=("Segoe UI", 9, "bold"))
+        s.map("Treeview", background=[("selected", "#155e75")],
+              foreground=[("selected", "#ffffff")])
+        s.configure("TNotebook", background=r["arka"], borderwidth=0)
+        s.configure("TNotebook.Tab", background=r["panel"],
+                    foreground=r["gri"], padding=(12, 6),
+                    font=("Segoe UI", 9, "bold"), borderwidth=0)
+        s.map("TNotebook.Tab",
+              background=[("selected", r["vurgu"])],
+              foreground=[("selected", "#06121f")])
+        s.configure("TScrollbar", background=r["buton"],
+                    troughcolor=r["koyu"], bordercolor=r["arka"],
+                    arrowcolor=r["metin"], borderwidth=0)
+        s.map("TScrollbar", background=[("active", r["buton_act"])])
+        s.configure("TProgressbar", troughcolor=r["koyu"],
+                    background=r["vurgu"], bordercolor=r["koyu"],
+                    lightcolor=r["vurgu"], darkcolor=r["vurgu"])
+        s.configure("TSeparator", background=r["kenar"])
+        s.configure("TLabelframe", background=r["panel"],
+                    bordercolor=r["kenar"])
+        s.configure("TLabelframe.Label", background=r["panel"],
+                    foreground=r["vurgu"], font=("Segoe UI", 10, "bold"))
+        s.configure("Status.TLabel", background=r["baslik_bant"],
+                    foreground=r["metin"], font=("Segoe UI", 9), padding=(6, 5))
+
+    @staticmethod
+    def _combobox_karanlik(kutu) -> None:
+        """Açılır listeyi (dropdown) karanlık temaya çevirir."""
+        try:
+            p = kutu.tk.eval("ttk::combobox::PopdownWindow %s" % kutu)
+            kutu.tk.eval(
+                f"{p} configure -background {RENKLER['koyu']} "
+                f"-foreground {RENKLER['baslik']} "
+                f"-selectbackground {RENKLER['vurgu']} "
+                f"-selectforeground #06121f")
+        except tk.TclError:
+            pass
 
     # ------------------------------------------------------------------
     #  Kurulum
@@ -485,10 +618,19 @@ class Uygulama(tk.Tk):
         except Exception as hata:
             messagebox.showerror("Kayıt hatası", f"Config kaydedilemedi:\n{hata}")
 
-    def _menu_kur(self):
-        menu = tk.Menu(self)
+    def _menu_yap(self, ebeveyn=None) -> tk.Menu:
+        """Karanlık temalı menü üretir."""
+        return tk.Menu(ebeveyn or self, tearoff=0,
+                       bg=RENKLER["panel"], fg=RENKLER["baslik"],
+                       activebackground=RENKLER["vurgu"],
+                       activeforeground="#06121f",
+                       font=("Segoe UI", 9), borderwidth=1,
+                       relief="flat")
 
-        dosya = tk.Menu(menu, tearoff=0)
+    def _menu_kur(self):
+        menu = self._menu_yap()
+
+        dosya = self._menu_yap(menu)
         dosya.add_command(label="Config Aç…", command=self._config_ac,
                           accelerator="Ctrl+O")
         dosya.add_command(label="Config Farklı Kaydet…",
@@ -504,7 +646,7 @@ class Uygulama(tk.Tk):
         dosya.add_command(label="Çıkış", command=self._kapat)
         menu.add_cascade(label="Dosya", menu=dosya)
 
-        arac = tk.Menu(menu, tearoff=0)
+        arac = self._menu_yap(menu)
         arac.add_command(label="Tümünü Tara", command=self.tarama_baslat,
                          accelerator="F5")
         arac.add_command(label="Seçili Ürünleri Tara",
@@ -516,6 +658,8 @@ class Uygulama(tk.Tk):
                          accelerator="F7")
         arac.add_command(label="Radar Sekmesine Git",
                          command=lambda: self.ust_sayfa.select(self.radar_sayfa))
+        arac.add_command(label="İthalat Radarı'na Git",
+                         command=lambda: self.ust_sayfa.select(self.ithalat_sayfa))
         arac.add_separator()
         arac.add_command(label="Seçici Bul…", command=self.secici_bul,
                          accelerator="Ctrl+F")
@@ -528,14 +672,14 @@ class Uygulama(tk.Tk):
         arac.add_command(label="Config Klasörünü Aç", command=self._klasor_ac)
         menu.add_cascade(label="Araçlar", menu=arac)
 
-        gorunum = tk.Menu(menu, tearoff=0)
+        gorunum = self._menu_yap(menu)
         gorunum.add_command(label="Konsolu Temizle", command=self.konsol_temizle)
         gorunum.add_command(label="Fiyat Geçmişini Yenile",
                             command=self.gecmis_yenile)
         gorunum.add_command(label="Raporu Yenile", command=self.rapor_yenile)
         menu.add_cascade(label="Görünüm", menu=gorunum)
 
-        yardim = tk.Menu(menu, tearoff=0)
+        yardim = self._menu_yap(menu)
         yardim.add_command(label="Hakkında", command=self._hakkinda)
         yardim.add_command(label="Kullanım Kılavuzu", command=self._kilavuz)
         menu.add_cascade(label="Yardım", menu=yardim)
@@ -551,106 +695,289 @@ class Uygulama(tk.Tk):
         self.bind("<Escape>", lambda e: self.tarama_durdur())
         self.bind("<F7>", lambda e: self.radar_baslat())
 
-    def _arac_cubugu(self):
-        cerceve = ttk.Frame(self, style="TTk.TFrame", padding=(10, 8))
+    def _baslik_cubugu(self):
+        """Üst başlık: logo + rozetler + hızlı erişim butonları."""
+        cerceve = tk.Frame(self, bg=RENKLER["baslik_bant"])
         cerceve.grid(row=0, column=0, sticky=(W, E))
 
-        self.tara_btn = ttk.Button(cerceve, text="▶  Tarama Başlat",
+        sol = tk.Frame(cerceve, bg=RENKLER["baslik_bant"])
+        sol.pack(side=LEFT, padx=14, pady=9)
+
+        tk.Label(sol, text="⚡", bg=RENKLER["baslik_bant"],
+                 fg=RENKLER["vurgu"], font=("Segoe UI", 15)
+                 ).pack(side=LEFT)
+        tk.Label(sol, text="FİYAT TAKİP BOTU", bg=RENKLER["baslik_bant"],
+                 fg=RENKLER["baslik"],
+                 font=("Segoe UI", 13, "bold")).pack(side=LEFT, padx=(7, 0))
+        tk.Label(sol, text=" v2.5 ", bg=RENKLER["vurgu"], fg="#06121f",
+                 font=("Segoe UI", 8, "bold"), padx=5, pady=1
+                 ).pack(side=LEFT, padx=(8, 0))
+        self._rozetler = []
+        for metin in ("🔔 Anında Alarm", "⏱ 7/24 Otomatik Tarama"):
+            rozet = tk.Label(sol, text=metin, bg=RENKLER["kart"],
+                             fg=RENKLER["metin"], font=("Segoe UI", 9),
+                             padx=10, pady=3, highlightthickness=1,
+                             highlightbackground=RENKLER["kenar"])
+            rozet.pack(side=LEFT, padx=(14, 0))
+            self._rozetler.append(rozet)
+
+        # pencere daralırsa rozetleri gizle (başlık taşmasın)
+        cerceve.bind("<Configure>", self._baslik_uydur, add="+")
+
+        sag = tk.Frame(cerceve, bg=RENKLER["baslik_bant"])
+        sag.pack(side=RIGHT, padx=14, pady=9)
+
+        ttk.Button(sag, text="＋ Ürün Ekle",
+                   command=self.urun_ekle).pack(side=LEFT, padx=(0, 5))
+        ttk.Button(sag, text="📊 Rapor", command=self._rapor_ac
+                   ).pack(side=LEFT, padx=(0, 5))
+
+        self.csv_dugme = ttk.Button(sag, text="📄 CSV ▾",
+                                    command=self._csv_menusu)
+        self.csv_dugme.pack(side=LEFT, padx=(0, 5))
+
+        ttk.Button(sag, text="⚙ Ayarlar",
+                   command=self.ayarlar_ac).pack(side=LEFT, padx=(0, 10))
+
+        self.tara_btn = ttk.Button(sag, text="▶  Tarama",
                                    command=self.tarama_baslat)
-        self.tara_btn.pack(side=LEFT, padx=(0, 6))
+        self.tara_btn.pack(side=LEFT, padx=(0, 5))
 
-        self.secili_btn = ttk.Button(cerceve, text="▶ Seçiliyi Tara",
-                                     command=lambda: self.tarama_baslat(secili=True))
-        self.secili_btn.pack(side=LEFT, padx=(0, 6))
-
-        self.durdur_btn = ttk.Button(cerceve, text="■ Durdur",
+        self.durdur_btn = ttk.Button(sag, text="■ Durdur",
                                      command=self.tarama_durdur,
                                      state="disabled")
-        self.durdur_btn.pack(side=LEFT, padx=(0, 6))
+        self.durdur_btn.pack(side=LEFT)
 
-        ttk.Separator(cerceve, orient="vertical").pack(side=LEFT, fill=Y,
-                                                       padx=8)
-        ttk.Button(cerceve, text="+ Ürün Ekle",
-                   command=self.urun_ekle).pack(side=LEFT, padx=(0, 6))
-        ttk.Button(cerceve, text="✎ Düzenle",
-                   command=self.urun_duzenle).pack(side=LEFT, padx=(0, 6))
-        ttk.Button(cerceve, text="🗑 Sil",
-                   command=self.urun_sil).pack(side=LEFT, padx=(0, 6))
+        # CSV açılır menüsü
+        self.csv_menu = self._menu_yap()
+        for etiket, tur in (("Tarama Sonuçları", "sonuclar"),
+                            ("Rapor", "rapor"),
+                            ("Ürün Listesi", "urunler"),
+                            ("Fiyat Geçmişi", "gecmis"),
+                            ("Rakip Radar", "radar"),
+                            ("İthalat Radarı", "ithalat")):
+            self.csv_menu.add_command(
+                label=etiket, command=lambda t=tur: self._csv_aktar(t))
 
-        ttk.Separator(cerceve, orient="vertical").pack(side=LEFT, fill=Y,
-                                                       padx=8)
-        ttk.Button(cerceve, text="🔍 Seçici Bul",
-                   command=self.secici_bul).pack(side=LEFT, padx=(0, 6))
-        ttk.Button(cerceve, text="📊 Rapor",
-                   command=lambda: self.ust_sayfa.select(self.rapor_sayfa)
-                   ).pack(side=LEFT, padx=(0, 6))
-        ttk.Button(cerceve, text="🏆 Radar",
-                   command=lambda: self.ust_sayfa.select(self.radar_sayfa)
-                   ).pack(side=LEFT, padx=(0, 6))
-        ttk.Button(cerceve, text="🖼 Görsel Getir",
-                   command=self.gorsel_getir).pack(side=LEFT, padx=(0, 6))
-        ttk.Button(cerceve, text="⚙ Ayarlar",
-                   command=self.ayarlar_ac).pack(side=LEFT)
+    def _csv_menusu(self):
+        x = self.csv_dugme.winfo_rootx()
+        y = self.csv_dugme.winfo_rooty() + self.csv_dugme.winfo_height()
+        self.csv_menu.tk.call("tk_popup", self.csv_menu, x, y)
+
+    def _rapor_ac(self):
+        """Rapor sekmesini açıp raporu yeniler (başlık butonu)."""
+        self.ust_sayfa.select(self.rapor_sayfa)
+        self.rapor_yenile()
+
+    def _baslik_uydur(self, olay) -> None:
+        """Dar pencerede başlık rozetlerini gizleyip genişleyince geri
+        getirir (butonlar taşmasın diye)."""
+        genis = olay.width >= 1210
+        for rozet in getattr(self, "_rozetler", []):
+            gorunur = rozet.winfo_ismapped()
+            if genis and not gorunur:
+                rozet.pack(side=LEFT, padx=(14, 0))
+            elif not genis and gorunur:
+                rozet.pack_forget()
 
     def _govde(self):
-        ana = ttk.Frame(self, style="TTk.TFrame", padding=10)
+        ana = ttk.Frame(self, style="TTk.TFrame", padding=(12, 8))
         ana.grid(row=1, column=0, sticky=(N, S, E, W))
+        ana.columnconfigure(0, minsize=330, weight=0)
         ana.columnconfigure(1, weight=1)
         ana.rowconfigure(0, weight=1)
 
-        # ---------- SOL: ürün listesi ----------
-        sol = ttk.LabelFrame(ana, text="  Ürünler  ", padding=8)
-        sol.grid(row=0, column=0, sticky=(N, S, W), padx=(0, 8))
-        sol.rowconfigure(2, weight=1)
+        # ===============================================================
+        #  SOL: kontrol paneli (FiyatAvcısı form alanı)
+        # ===============================================================
+        sol = tk.Frame(ana, bg=RENKLER["panel"], highlightthickness=1,
+                       highlightbackground=RENKLER["kenar"])
+        sol.grid(row=0, column=0, sticky=(N, S, W), padx=(0, 10))
 
-        arama_cerceve = ttk.Frame(sol, style="TPanel.TFrame")
-        arama_cerceve.grid(row=0, column=0, columnspan=2, sticky=(W, E),
-                           pady=(0, 6))
-        ttk.Label(arama_cerceve, text="🔍").pack(side=LEFT)
+        # --- marka ---
+        marka = tk.Frame(sol, bg=RENKLER["panel"])
+        marka.pack(fill=X, padx=14, pady=(10, 3))
+        ikon = tk.Frame(marka, bg=RENKLER["koyu"], width=42, height=42,
+                        highlightthickness=1,
+                        highlightbackground=RENKLER["vurgu"])
+        ikon.pack(side=LEFT)
+        ikon.pack_propagate(False)
+        tk.Label(ikon, text="📈", bg=RENKLER["koyu"],
+                 font=("Segoe UI", 17)).pack(expand=True)
+        marka_sag = tk.Frame(marka, bg=RENKLER["panel"])
+        marka_sag.pack(side=LEFT, padx=(10, 0))
+        satir = tk.Frame(marka_sag, bg=RENKLER["panel"])
+        satir.pack(anchor=W)
+        tk.Label(satir, text="RAKİP FİYAT BOTU", bg=RENKLER["panel"],
+                 fg=RENKLER["baslik"],
+                 font=("Segoe UI", 12, "bold")).pack(side=LEFT)
+        tk.Label(satir, text=" v2.5 ", bg=RENKLER["vurgu"], fg="#06121f",
+                 font=("Segoe UI", 8, "bold"), padx=4
+                 ).pack(side=LEFT, padx=(6, 0))
+        tk.Label(marka_sag,
+                 text="Pazaryeri Rakip Fiyat Takip & İndirim Alarmı",
+                 bg=RENKLER["panel"], fg=RENKLER["gri"],
+                 font=("Segoe UI", 8)).pack(anchor=W, pady=(3, 0))
+
+        alanlar = tk.Frame(sol, bg=RENKLER["panel"])
+        alanlar.pack(fill=X, padx=14, pady=(4, 0))
+
+        # 1) HEDEF PAZARYERİ / URL
+        self._alan_etiketi(alanlar, "HEDEF PAZARYERİ / URL")
+        satir = tk.Frame(alanlar, bg=RENKLER["panel"])
+        satir.pack(fill=X, pady=(0, 2))
+        self.url_on = tk.Entry(satir, font=("Segoe UI", 10),
+                               bg=RENKLER["koyu"], fg=RENKLER["gri"],
+                               insertbackground=RENKLER["baslik"],
+                               relief="flat", bd=6,
+                               highlightthickness=1,
+                               highlightbackground=RENKLER["kenar"])
+        self.url_on.pack(side=LEFT, fill=X, expand=True, ipady=4)
+        self.url_on.insert(0, URL_IPUCU)
+        self.url_on.bind("<FocusIn>", self._url_on_basla)
+        self.url_on.bind("<FocusOut>", self._url_on_bit)
+        tk.Button(satir, text="＋", command=self.url_ile_ekle,
+                  bg=RENKLER["vurgu"], fg="#06121f", activebackground="#67e8f9",
+                  activeforeground="#06121f", relief="flat", bd=0, padx=6,
+                  font=("Segoe UI", 12, "bold"), width=3, cursor="hand2"
+                  ).pack(side=LEFT, padx=(6, 0), ipady=2)
+
+        # 2) TAKİP PERİYODU
+        self._alan_etiketi(alanlar, "TAKİP PERİYODU")
+        self.periyot_deg = StringVar()
+        self._alan_secici(alanlar, self.periyot_deg, PERIYOT_DEGERLER,
+                          self.periyot_degisti)
+
+        # 3) ALARM KOŞULU
+        self._alan_etiketi(alanlar, "ALARM KOŞULU")
+        self.esik_deg = StringVar()
+        self._alan_secici(alanlar, self.esik_deg, ESIK_DEGERLER,
+                          self.esik_degisti)
+
+        # 4) BİLDİRİM TÜRÜ
+        self._alan_etiketi(alanlar, "BİLDİRİM TÜRÜ")
+        self.bildirim_deg = StringVar()
+        self._alan_secici(alanlar, self.bildirim_deg, BILDIRIM_DEGERLER,
+                          self.bildirim_degisti)
+
+        # --- büyük başlat / durdur butonu ---
+        self.takip_btn = ttk.Button(sol, text="☑  Fiyat Takibini Başlat",
+                                    command=self.takip_degistir,
+                                    style="Baslat.TButton")
+        self.takip_btn.pack(fill=X, padx=14, pady=(10, 6))
+
+        yan = tk.Frame(sol, bg=RENKLER["panel"])
+        yan.pack(fill=X, padx=14)
+        self.secili_btn = ttk.Button(
+            yan, text="▶ Seçili",
+            command=lambda: self.tarama_baslat(secili=True))
+        self.secili_btn.pack(side=LEFT, fill=X, expand=True)
+        ttk.Button(yan, text="🔍 Seçici Bul",
+                   command=self.secici_bul).pack(side=LEFT, fill=X,
+                                                 expand=True, padx=(6, 0))
+        ttk.Button(yan, text="⚙ Ayarlar",
+                   command=self.ayarlar_ac).pack(side=LEFT, fill=X,
+                                                 expand=True, padx=(6, 0))
+
+        # --- ürün listesi (arama + tablo) ---
+        liste = tk.Frame(sol, bg=RENKLER["panel"])
+        liste.pack(fill=BOTH, expand=True, padx=14, pady=(8, 8))
+
+        bas = tk.Frame(liste, bg=RENKLER["panel"])
+        bas.pack(fill=X, pady=(0, 5))
+        tk.Label(bas, text="ÜRÜNLER", bg=RENKLER["panel"],
+                 fg=RENKLER["vurgu"],
+                 font=("Segoe UI", 8, "bold")).pack(side=LEFT)
+        self.sayac_deg = StringVar(value="0 ürün")
+        tk.Label(bas, textvariable=self.sayac_deg, bg=RENKLER["panel"],
+                 fg=RENKLER["gri"], font=("Segoe UI", 8)
+                 ).pack(side=RIGHT)
         self.arama_deg = StringVar()
         self.arama_deg.trace_add("write", lambda *_: self.liste_doldur())
-        ttk.Entry(arama_cerceve, textvariable=self.arama_deg,
-                  width=26).pack(side=LEFT, fill=X, expand=True, padx=(4, 0))
-        ttk.Button(arama_cerceve, text="✕", width=3,
-                   command=lambda: self.arama_deg.set("")).pack(side=LEFT,
-                                                                padx=(4, 0))
+        ara = tk.Entry(bas, textvariable=self.arama_deg,
+                       font=("Segoe UI", 9), bg=RENKLER["koyu"],
+                       fg=RENKLER["baslik"],
+                       insertbackground=RENKLER["baslik"],
+                       relief="flat", bd=5, highlightthickness=1,
+                       highlightbackground=RENKLER["kenar"])
+        ttk.Button(bas, text="✕", width=2,
+                   command=lambda: self.arama_deg.set("")).pack(side=RIGHT)
+        ara.pack(side=RIGHT, fill=X, expand=True, padx=(8, 4))
+        agac_kutu = tk.Frame(liste, bg=RENKLER["koyu"],
+                             highlightthickness=1,
+                             highlightbackground=RENKLER["kenar"])
+        agac_kutu.pack(fill=BOTH, expand=True)
+        agac_kutu.columnconfigure(0, weight=1)
+        agac_kutu.rowconfigure(0, weight=1)
 
         kolonlar = ("ad", "fiyat", "durum")
-        self.agac = ttk.Treeview(sol, columns=kolonlar, show="headings",
-                                 height=20, selectmode="extended")
+        self.agac = ttk.Treeview(agac_kutu, columns=kolonlar,
+                                 show="headings", height=4,
+                                 selectmode="extended")
         self.agac.heading("ad", text="Ürün")
         self.agac.heading("fiyat", text="Son Fiyat")
         self.agac.heading("durum", text="Durum")
-        self.agac.column("ad", width=210, anchor=W)
-        self.agac.column("fiyat", width=110, anchor=E)
-        self.agac.column("durum", width=86, anchor=CENTER)
+        self.agac.column("ad", width=142, anchor=W)
+        self.agac.column("fiyat", width=80, anchor=E)
+        self.agac.column("durum", width=50, anchor=CENTER)
 
-        yatay = ttk.Scrollbar(sol, orient="horizontal",
-                              command=self.agac.xview)
-        self.agac.configure(xscrollcommand=yatay.set)
-        self.agac.grid(row=2, column=0, sticky=(N, S, W, E))
-        dikey = ttk.Scrollbar(sol, orient="vertical", command=self.agac.yview)
+        self.agac.grid(row=0, column=0, sticky=(N, S, W, E))
+        dikey = ttk.Scrollbar(agac_kutu, orient="vertical",
+                              command=self.agac.yview)
         self.agac.configure(yscrollcommand=dikey.set)
-        dikey.grid(row=2, column=1, sticky=(N, S))
-        yatay.grid(row=3, column=0, columnspan=2, sticky=(W, E))
+        dikey.grid(row=0, column=1, sticky=(N, S))
 
         self.agac.bind("<Double-1>", lambda e: self.urun_duzenle())
         self.agac.bind("<<TreeviewSelect>>", lambda e: self._secim_degisti())
 
-        sayac = ttk.Frame(sol, style="TPanel.TFrame")
-        sayac.grid(row=4, column=0, columnspan=2, sticky=(W, E), pady=(6, 0))
-        self.sayac_deg = StringVar(value="0 ürün")
-        ttk.Label(sayac, textvariable=self.sayac_deg,
-                  foreground=RENKLER["gri"]).pack(side=LEFT)
-
-        # ---------- SAĞ: sekmeler ----------
-        sag = ttk.Frame(ana, style="TTk.TFrame")
+        # ===============================================================
+        #  SAĞ: canlı kart paneli + sekmeler
+        # ===============================================================
+        sag = tk.Frame(ana, bg=RENKLER["arka"])
         sag.grid(row=0, column=1, sticky=(N, S, E, W))
-        sag.rowconfigure(0, weight=1)
+        sag.rowconfigure(1, weight=3, minsize=200)
+        sag.rowconfigure(2, weight=2, minsize=170)
         sag.columnconfigure(0, weight=1)
 
+        # --- canlı panel başlığı ---
+        canli = tk.Frame(sag, bg=RENKLER["arka"])
+        canli.grid(row=0, column=0, columnspan=2, sticky=(W, E),
+                   pady=(0, 6))
+        tk.Label(canli, text="●", bg=RENKLER["arka"], fg=RENKLER["yesil"],
+                 font=("Segoe UI", 10)).pack(side=LEFT)
+        self.kart_ozet = StringVar(value="Takip edilen ürün yok.")
+        tk.Label(canli, textvariable=self.kart_ozet, bg=RENKLER["arka"],
+                 fg=RENKLER["baslik"],
+                 font=("Segoe UI", 11, "bold")).pack(side=LEFT, padx=(7, 0))
+        tk.Label(canli, text="Canlı Panel v2.0", bg=RENKLER["arka"],
+                 fg=RENKLER["gri"], font=("Segoe UI", 9)).pack(side=RIGHT)
+
+        # --- ürün kartları (kaydırılabilir) ---
+        kart_kutu = tk.Frame(sag, bg=RENKLER["arka"])
+        kart_kutu.grid(row=1, column=0, columnspan=2,
+                       sticky=(N, S, E, W))
+        kart_kutu.rowconfigure(0, weight=1)
+        kart_kutu.columnconfigure(0, weight=1)
+
+        self.kart_canvas = tk.Canvas(kart_kutu, bg=RENKLER["arka"],
+                                     highlightthickness=0, bd=0)
+        k_kay = ttk.Scrollbar(kart_kutu, orient="vertical",
+                              command=self.kart_canvas.yview)
+        self.kart_canvas.configure(yscrollcommand=k_kay.set)
+        self.kart_canvas.grid(row=0, column=0, sticky=(N, S, E, W))
+        k_kay.grid(row=0, column=1, sticky=(N, S))
+
+        self.kart_govde = tk.Frame(self.kart_canvas, bg=RENKLER["arka"])
+        self._kart_pencere = self.kart_canvas.create_window(
+            (0, 0), window=self.kart_govde, anchor="nw")
+        self.kart_govde.bind("<Configure>", self._kart_bolge)
+        self.kart_canvas.bind("<Configure>", self._kart_genislik)
+        self.kart_govde.bind("<MouseWheel>", self._kart_tekerlek)
+
+        # --- sekmeler ---
         self.ust_sayfa = ttk.Notebook(sag)
-        self.ust_sayfa.grid(row=0, column=0, sticky=(N, S, E, W))
+        self.ust_sayfa.grid(row=2, column=0, columnspan=2,
+                            sticky=(N, S, E, W))
 
         # --- Tarama sonuçları ---
         sonuc_sayfa = ttk.Frame(self.ust_sayfa, style="TTk.TFrame", padding=6)
@@ -673,7 +1000,7 @@ class Uygulama(tk.Tk):
 
         skolonlar = ("ad", "onceki", "yeni", "yuzde", "durum", "mesaj")
         self.sonuc_agac = ttk.Treeview(sonuc_sayfa, columns=skolonlar,
-                                       show="headings")
+                                       show="headings", height=4)
         basliklar = {"ad": "Ürün", "onceki": "Önceki", "yeni": "Yeni",
                      "yuzde": "Değişim", "durum": "Durum", "mesaj": "Mesaj"}
         genislik = {"ad": 240, "onceki": 110, "yeni": 110, "yuzde": 90,
@@ -711,7 +1038,7 @@ class Uygulama(tk.Tk):
 
         self.gecmis_agac = ttk.Treeview(
             gecmis_sayfa, columns=("tarih", "fiyat"), show="headings",
-            height=14)
+            height=7)
         self.gecmis_agac.heading("tarih", text="Tarih")
         self.gecmis_agac.heading("fiyat", text="Fiyat")
         self.gecmis_agac.column("tarih", width=130, anchor=W)
@@ -754,7 +1081,7 @@ class Uygulama(tk.Tk):
         r_kolonlar = ("ad", "kayit", "ilk", "son", "dusuk", "yuksek",
                       "degisim", "aralik")
         self.rapor_agac = ttk.Treeview(self.rapor_sayfa, columns=r_kolonlar,
-                                       show="headings")
+                                       show="headings", height=6)
         r_baslik = {"ad": "Ürün", "kayit": "Kayıt", "ilk": "İlk",
                     "son": "Son", "dusuk": "En Düşük", "yuksek": "En Yüksek",
                     "degisim": "Değişim", "aralik": "Aralık"}
@@ -777,51 +1104,13 @@ class Uygulama(tk.Tk):
         # --- Rakip Radar sekmesi ---
         self._radar_sayfasi_ekle()
 
-        # ---------- ALT: konsol + görsel ----------
-        alt = ttk.Frame(ana, style="TTk.TFrame")
-        alt.grid(row=1, column=0, columnspan=2, sticky=(W, E, N, S),
-                 pady=(10, 0))
-        alt.rowconfigure(0, weight=1)
-        alt.columnconfigure(0, weight=1)
+        # --- İthalat Radarı sekmesi ---
+        self._ithalat_sayfasi_ekle()
 
-        self.alt_sayfa = ttk.Notebook(alt)
-        self.alt_sayfa.grid(row=0, column=0, sticky=(N, S, E, W))
-
-        # Konsol
-        konsol_sayfa = ttk.Frame(self.alt_sayfa, style="TTk.TFrame")
-        self.alt_sayfa.add(konsol_sayfa, text="  📟 Konsol  ")
-        konsol_sayfa.rowconfigure(0, weight=1)
-        konsol_sayfa.columnconfigure(0, weight=1)
-
-        self.konsol = tk.Text(konsol_sayfa, height=11, wrap="word",
-                              font=("Consolas", 10),
-                              background="#101828", foreground="#d5e0f0",
-                              insertbackground="#ffffff",
-                              relief="flat", padx=10, pady=8,
-                              state="disabled")
-        self.konsol.tag_configure("hata", foreground="#fca5a5")
-        self.konsol.tag_configure("basari", foreground="#86efac")
-        self.konsol.tag_configure("uyari", foreground="#fcd34d")
-        self.konsol.tag_configure("bilgi", foreground="#93c5fd")
-        self.konsol.tag_configure("normal", foreground="#d5e0f0")
-        k_d = ttk.Scrollbar(konsol_sayfa, orient="vertical",
-                            command=self.konsol.yview)
-        self.konsol.configure(yscrollcommand=k_d.set)
-        self.konsol.grid(row=0, column=0, sticky=(N, S, E, W))
-        k_d.grid(row=0, column=1, sticky=(N, S))
-
-        k_ust = ttk.Frame(konsol_sayfa, style="TTk.TFrame")
-        k_ust.grid(row=1, column=0, columnspan=2, sticky=(W, E), pady=(4, 0))
-        ttk.Button(k_ust, text="Temizle",
-                   command=self.konsol_temizle).pack(side=LEFT)
-        ttk.Button(k_ust, text="Konsolu Kopyala",
-                   command=self._konsol_kopyala).pack(side=LEFT, padx=(6, 0))
-        ttk.Button(k_ust, text="Dosyaya Kaydet",
-                   command=self._konsol_kaydet).pack(side=LEFT, padx=(6, 0))
-
-        # Görsel
-        gorsel_sayfa = ttk.Frame(self.alt_sayfa, style="TTk.TFrame", padding=6)
-        self.alt_sayfa.add(gorsel_sayfa, text="  🖼 Ürün Görseli  ")
+        # --- Ürün görseli sekmesi ---
+        gorsel_sayfa = ttk.Frame(self.ust_sayfa, style="TTk.TFrame", padding=6)
+        self.ust_sayfa.add(gorsel_sayfa, text="  🖼 Ürün Görseli  ")
+        self.gorsel_sayfa = gorsel_sayfa
         gorsel_sayfa.columnconfigure(1, weight=1)
         gorsel_sayfa.rowconfigure(0, weight=1)
 
@@ -842,7 +1131,13 @@ class Uygulama(tk.Tk):
         ttk.Label(sol_panel, text="Görsel listesi:",
                   foreground=RENKLER["gri"]).pack(anchor=W)
         self.gorsel_liste = tk.Listbox(sol_panel, height=8, width=26,
-                                       font=("Segoe UI", 9), exportselection=False)
+                                       font=("Segoe UI", 9),
+                                       exportselection=False,
+                                       bg=RENKLER["koyu"],
+                                       fg=RENKLER["metin"],
+                                       highlightthickness=0, relief="flat",
+                                       selectbackground=RENKLER["vurgu"],
+                                       selectforeground="#06121f")
         self.gorsel_liste.pack(fill=X, pady=(4, 0))
         self.gorsel_liste.bind("<<ListboxSelect>>",
                                lambda e: self.gorsel_secildi())
@@ -851,9 +1146,53 @@ class Uygulama(tk.Tk):
             gorsel_sayfa,
             text="Soldan 'Görseli Getir' deyin.\n\n"
                  "Seçili ürünün fiyatını ve görselini birlikte görürsünüz.",
-            bg=RENKLER["panel"], fg=RENKLER["gri"],
+            bg=RENKLER["koyu"], fg=RENKLER["gri"],
             font=("Segoe UI", 11), justify="center")
         self.gorsel_etiket.grid(row=0, column=1, sticky=(N, S, E, W))
+
+        # ---------- ALT: konsol şeridi (her zaman görünür) ----------
+        konsol_kutu = tk.Frame(ana, bg=RENKLER["panel"],
+                               highlightthickness=1,
+                               highlightbackground=RENKLER["kenar"])
+        konsol_kutu.grid(row=1, column=0, columnspan=2,
+                         sticky=(W, E), pady=(10, 0))
+
+        k_ust = tk.Frame(konsol_kutu, bg=RENKLER["panel"])
+        k_ust.pack(fill=X, padx=8, pady=(5, 0))
+        tk.Label(k_ust, text="📟 KONSOL", bg=RENKLER["panel"],
+                 fg=RENKLER["vurgu"],
+                 font=("Segoe UI", 8, "bold")).pack(side=LEFT)
+        ttk.Button(k_ust, text="Kaydet",
+                   command=self._konsol_kaydet).pack(side=RIGHT)
+        ttk.Button(k_ust, text="Kopyala",
+                   command=self._konsol_kopyala).pack(side=RIGHT,
+                                                      padx=(0, 6))
+        ttk.Button(k_ust, text="Temizle",
+                   command=self.konsol_temizle).pack(side=RIGHT,
+                                                     padx=(0, 6))
+
+        k_govde = tk.Frame(konsol_kutu, bg=RENKLER["koyu"])
+        k_govde.pack(fill=X, padx=8, pady=(5, 8))
+        k_govde.columnconfigure(0, weight=1)
+        k_govde.rowconfigure(0, weight=1)
+
+        self.konsol = tk.Text(k_govde, height=4, wrap="word",
+                              font=("Consolas", 9),
+                              background=RENKLER["koyu"],
+                              foreground="#cbd5e1",
+                              insertbackground="#ffffff",
+                              relief="flat", padx=8, pady=6,
+                              borderwidth=0, state="disabled")
+        self.konsol.tag_configure("hata", foreground="#fca5a5")
+        self.konsol.tag_configure("basari", foreground="#86efac")
+        self.konsol.tag_configure("uyari", foreground="#fcd34d")
+        self.konsol.tag_configure("bilgi", foreground="#7dd3fc")
+        self.konsol.tag_configure("normal", foreground="#cbd5e1")
+        k_d = ttk.Scrollbar(k_govde, orient="vertical",
+                            command=self.konsol.yview)
+        self.konsol.configure(yscrollcommand=k_d.set)
+        self.konsol.grid(row=0, column=0, sticky=(N, S, E, W))
+        k_d.grid(row=0, column=1, sticky=(N, S))
 
         # ---------- ilerleme ----------
         ilerleme = ttk.Frame(self, style="TTk.TFrame")
@@ -866,15 +1205,27 @@ class Uygulama(tk.Tk):
                   foreground=RENKLER["gri"]).pack(anchor=W)
 
     def _durum_cubugu(self):
-        cerceve = ttk.Frame(self, style="TTk.TFrame")
-        cerceve.grid(row=3, column=0, sticky=(W, E))
+        # --- alt bant: özellik şeridi (FiyatAvcısı altındaki tikler) ---
+        alt = tk.Frame(self, bg=RENKLER["baslik_bant"])
+        alt.grid(row=3, column=0, sticky=(W, E), padx=12, pady=(6, 0))
+        for metin in ("7/24 Otomatik Rakip Fiyat Takibi",
+                      "Fiyat Değişimlerinde Anlık Alarm",
+                      "Kâr Marjınızı Daima Zirvede Tutun",
+                      "Sınırsız Ürün Takibi"):
+            tk.Label(alt, text="✓ " + metin, bg=RENKLER["baslik_bant"],
+                     fg=RENKLER["metin"],
+                     font=("Segoe UI", 9)).pack(side=LEFT, expand=True,
+                                                padx=10, pady=5)
+
+        # --- durum çubuğu ---
+        cerceve = tk.Frame(self, bg=RENKLER["baslik_bant"])
+        cerceve.grid(row=4, column=0, sticky=(W, E))
 
         self.durum_deg = StringVar(value="Hazır")
         ttk.Label(cerceve, textvariable=self.durum_deg,
-                  style="Status.TLabel").pack(side=LEFT, fill=X, expand=True)
+                  style="Status.TLabel").pack(side=LEFT, fill=X,
+                                              expand=True)
 
-        sag = ttk.Label(cerceve, style="Status.TLabel")
-        sag.pack(side=RIGHT)
         self.sag_durum = StringVar(value=self._sag_durum_metni())
         ttk.Label(cerceve, textvariable=self.sag_durum,
                   style="Status.TLabel").pack(side=RIGHT)
@@ -886,6 +1237,357 @@ class Uygulama(tk.Tk):
         n = len(self.ayar.get("urunler", []))
         parcalar.append(f"{n} ürün")
         return "   ·   ".join(parcalar)
+
+    # ------------------------------------------------------------------
+    #  Sol panel alanları
+    # ------------------------------------------------------------------
+    def _alan_etiketi(self, ebeveyn, metin: str) -> None:
+        tk.Label(ebeveyn, text=metin, bg=RENKLER["panel"],
+                 fg=RENKLER["gri"],
+                 font=("Segoe UI", 8, "bold")).pack(anchor=W,
+                                                    pady=(5, 2))
+
+    def _alan_secici(self, ebeveyn, degisken: StringVar,
+                     degerler: list[str], komut) -> ttk.Combobox:
+        kutu = ttk.Combobox(ebeveyn, textvariable=degisken,
+                            values=degerler, state="readonly")
+        kutu.pack(fill=X, ipady=1)
+        kutu.bind("<<ComboboxSelected>>", lambda _e: komut())
+        self._combobox_karanlik(kutu)
+        return kutu
+
+    def _alanlari_yukle(self) -> None:
+        """Config değerlerini sol panel alanlarına yansıtır."""
+        ayar = self.ayar.get("ayarlar", {})
+
+        dk = ayar.get("periyot_dakika", 15)
+        try:
+            dk = int(dk)
+        except (TypeError, ValueError):
+            dk = 15
+        i = PERIYOT_DAKIKA.index(dk) if dk in PERIYOT_DAKIKA else 2
+        self.periyot_deg.set(PERIYOT_DEGERLER[i])
+
+        try:
+            esik = float(ayar.get("esik_yuzde", 0))
+        except (TypeError, ValueError):
+            esik = 0.0
+        self.esik_deg.set(ESIK_DEGERLER[_indeks(ESIK_YUZDE, esik, 0)])
+
+        bildirim = str(ayar.get("bildirim", "telegram"))
+        i = (BILDIRIM_ANAHTAR.index(bildirim)
+             if bildirim in BILDIRIM_ANAHTAR else 0)
+        self.bildirim_deg.set(BILDIRIM_DEGERLER[i])
+
+    def _url_on_basla(self, _olay=None) -> None:
+        if self.url_on.get() == URL_IPUCU:
+            self.url_on.delete(0, END)
+            self.url_on.configure(fg=RENKLER["baslik"])
+
+    def _url_on_bit(self, _olay=None) -> None:
+        if not self.url_on.get().strip():
+            self.url_on.insert(0, URL_IPUCU)
+            self.url_on.configure(fg=RENKLER["gri"])
+
+    def url_ile_ekle(self) -> None:
+        """Adres çubuğundaki URL ile hızlıca ürün ekler."""
+        deger = self.url_on.get().strip()
+        if deger == URL_IPUCU:
+            deger = ""
+        if deger and not deger.startswith(("http://", "https://")):
+            messagebox.showwarning("Geçersiz URL",
+                                   "URL http:// veya https:// ile "
+                                   "başlamalı.")
+            return
+        self.urun_ekle(url_on=deger)
+
+    def periyot_degisti(self) -> None:
+        i = _indeks(PERIYOT_DEGERLER, self.periyot_deg.get(), 2)
+        self.ayar.setdefault("ayarlar", {})["periyot_dakika"] = \
+            PERIYOT_DAKIKA[i]
+        self._config_kaydet()
+        self.durum_deg.set(f"Takip periyodu: {self.periyot_deg.get()}")
+        if self.otomatik_takip and not self.tarama_suriyor:
+            self._tekrar_planla()
+
+    def esik_degisti(self) -> None:
+        i = _indeks(ESIK_DEGERLER, self.esik_deg.get(), 0)
+        self.ayar.setdefault("ayarlar", {})["esik_yuzde"] = ESIK_YUZDE[i]
+        self._config_kaydet()
+        self.kartlari_guncelle()
+        self.durum_deg.set(f"Alarm koşulu: {self.esik_deg.get()}")
+
+    def bildirim_degisti(self) -> None:
+        i = _indeks(BILDIRIM_DEGERLER, self.bildirim_deg.get(), 0)
+        self.ayar.setdefault("ayarlar", {})["bildirim"] = \
+            BILDIRIM_ANAHTAR[i]
+        self._config_kaydet()
+        self.durum_deg.set(f"Bildirim türü: {self.bildirim_deg.get()}")
+
+    # ------------------------------------------------------------------
+    #  Otomatik takip (başlat / durdur / periyot)
+    # ------------------------------------------------------------------
+    def _periyot_dakika(self) -> int:
+        try:
+            return int(self.ayar.get("ayarlar", {})
+                        .get("periyot_dakika", 15))
+        except (TypeError, ValueError):
+            return 15
+
+    def takip_degistir(self) -> None:
+        """Büyük başlat/durdur butonu — otomatik takibi açıp kapatır."""
+        if self.otomatik_takip or self.tarama_suriyor:
+            self.tarama_durdur()
+            self.durum_deg.set("Otomatik takip durduruldu.")
+            self.konsol_yaz("■ Otomatik takip durduruldu.")
+            return
+        if self.tarama_baslat():
+            self.otomatik_takip = True
+            dk = self._periyot_dakika()
+            if dk > 0:
+                self.konsol_yaz(f"⏱ Otomatik takip açık — "
+                                f"{dk} dakikada bir taranacak.")
+        self._takip_guncelle()
+
+    def _takip_guncelle(self) -> None:
+        if not hasattr(self, "takip_btn"):
+            return
+        if self.otomatik_takip or self.tarama_suriyor:
+            self.takip_btn.configure(text="■  Takibi Durdur",
+                                     style="Durdur.TButton")
+        else:
+            self.takip_btn.configure(text="☑  Fiyat Takibini Başlat",
+                                     style="Baslat.TButton")
+
+    def _periyot_iptal(self) -> None:
+        if self._periyot_zamanlayici is not None:
+            try:
+                self.after_cancel(self._periyot_zamanlayici)
+            except Exception:                        # noqa: BLE001
+                pass
+            self._periyot_zamanlayici = None
+
+    def _tekrar_planla(self) -> None:
+        """Tarama bitince otomatik takip sürüyorsa sonraki taramayı kurar."""
+        self._periyot_iptal()
+        if not self.otomatik_takip:
+            self._takip_guncelle()
+            return
+        dk = self._periyot_dakika()
+        if dk <= 0:
+            self.otomatik_takip = False
+            self._takip_guncelle()
+            self.durum_deg.set("Tarama tamamlandı (tek seferlik).")
+            return
+        self._periyot_zamanlayici = self.after(dk * 60000,
+                                               self._periyodik_tarama)
+        self.durum_deg.set(f"Otomatik takip — sonraki tarama {dk} dk sonra")
+        self._takip_guncelle()
+
+    def _periyodik_tarama(self) -> None:
+        self._periyot_zamanlayici = None
+        if not self.otomatik_takip:
+            return
+        if not self.tarama_baslat():
+            self.otomatik_takip = False
+            self._takip_guncelle()
+
+    # ------------------------------------------------------------------
+    #  Canlı panel — ürün kartları
+    # ------------------------------------------------------------------
+    def _kart_bolge(self, _olay=None) -> None:
+        yuk = max(self.kart_govde.winfo_reqheight(), 1)
+        self.kart_canvas.itemconfig(self._kart_pencere, height=yuk)
+        self.kart_canvas.configure(
+            scrollregion=self.kart_canvas.bbox("all"))
+
+    def _kart_genislik(self, olay) -> None:
+        yuk = max(self.kart_govde.winfo_reqheight(), 1)
+        self.kart_canvas.itemconfig(self._kart_pencere, width=olay.width,
+                                    height=yuk)
+        self.kart_canvas.configure(
+            scrollregion=self.kart_canvas.bbox("all"))
+
+    def _kart_tekerlek(self, olay) -> None:
+        adim = -1 if olay.delta > 0 else 1
+        self.kart_canvas.yview_scroll(adim, "units")
+
+    def _kart_olay_bagla(self, widget, tikla=None, cift=None) -> None:
+        if tikla is not None:
+            widget.bind("<Button-1>", tikla, add="+")
+        if cift is not None:
+            widget.bind("<Double-1>", cift, add="+")
+        widget.bind("<MouseWheel>", self._kart_tekerlek, add="+")
+        for cocuk in widget.winfo_children():
+            self._kart_olay_bagla(cocuk, tikla, cift)
+
+    def kartlari_guncelle(self, son_fiyatlar: dict | None = None) -> None:
+        """Canlı paneli config + son tarama ile yeniden çizer."""
+        if not hasattr(self, "kart_govde"):
+            return
+        for cocuk in self.kart_govde.winfo_children():
+            cocuk.destroy()
+
+        arama = self.arama_deg.get().strip().lower()
+        urunler = [u for u in self.ayar.get("urunler", [])
+                   if not arama
+                   or arama in (u.get("ad") or "").lower()
+                   or arama in (u.get("url") or "").lower()]
+
+        if son_fiyatlar is None:
+            son_fiyatlar = self._son_fiyat_haritasi()
+        tarama = {s.get("ad"): s for s in self.son_tarama if s.get("ad")}
+        esik = self._esik_degeri()
+
+        for u in urunler:
+            self._kart_olustur(u, son_fiyatlar, tarama.get(u.get("ad")),
+                               esik)
+
+        if not urunler:
+            tk.Label(self.kart_govde,
+                     text="Liste boş — soldaki alana rakip ürün linkini "
+                          "yapıştırıp  ＋  ile ekleyin.",
+                     bg=RENKLER["kart"], fg=RENKLER["gri"],
+                     font=("Segoe UI", 10), pady=36, padx=20,
+                     highlightthickness=1,
+                     highlightbackground=RENKLER["kenar"]).pack(fill=X)
+
+        self.kart_ozet.set(
+            f"Takip Edilen Ürünler: {len(urunler)} aktif rakip taranıyor")
+        self._kart_bolge()
+
+    def _esik_degeri(self) -> float:
+        try:
+            return float(self.ayar.get("ayarlar", {})
+                         .get("esik_yuzde", 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _kart_olustur(self, u: dict, son_fiyatlar: dict,
+                      s: dict | None, esik: float) -> None:
+        """Tek bir ürün kartını (FiyatAvcısı kartı gibi) çizer."""
+        ad = u.get("ad") or ""
+        fiyat, yon = son_fiyatlar.get(ad, (None, "—"))
+        try:
+            host = urlparse(u.get("url") or "").netloc.replace("www.", "")
+        except Exception:                            # noqa: BLE001
+            host = ""
+        host = host or "—"
+
+        # varsayılanlar
+        rozet = ("BEKLEMEDE", "gri")
+        durum_metin = "⏱ Tarama Bekliyor"
+        durum_renk = "gri"
+        vurgu_renk = ROZET["gri"][1]
+        alt_metin = f"{host} • Henüz kontrol edilmedi"
+
+        if s:
+            durum = s.get("durum")
+            yuzde = s.get("yuzde")
+            eski = cekirdek.fiyat_bicimle(s.get("onceki"),
+                                          s.get("para", ""))
+            yeni = cekirdek.fiyat_bicimle(s.get("fiyat"),
+                                          s.get("para", ""))
+            alt_metin = f"{host} • Eski: {eski} → Yeni: {yeni}"
+
+            if durum == "degisti" and yuzde is not None:
+                if yuzde < 0:
+                    rozet = (f"FİYAT DÜŞTÜ (%{abs(yuzde):.0f})", "yesil")
+                else:
+                    rozet = (f"FİYAT ARTTI (+%{yuzde:.0f})", "kirmizi")
+                vurgu_renk = ROZET[rozet[1]][1]
+                if esik <= 0 or abs(yuzde) >= esik:
+                    durum_metin = "🔔 Fiyat Alarmı Tetiklendi"
+                    durum_renk = "sari"
+                    vurgu_renk = ROZET["sari"][1]
+                else:
+                    durum_metin = f"○ Eşiğin altında kaldı (esik %{esik:g})"
+                    durum_renk = "gri"
+            elif durum == "degismedi":
+                rozet = ("SABİT FİYAT", "cyan")
+                durum_metin = "✓ Değişim Yok"
+                durum_renk = "yesil"
+                vurgu_renk = ROZET["cyan"][1]
+            elif durum in ("bulunamadi", "hata", "robots"):
+                rozet = ("FİYAT ALINAMADI", "sari")
+                durum_metin = "⚠ Kontrol Edilemedi"
+                durum_renk = "kirmizi"
+                vurgu_renk = ROZET["sari"][1]
+                alt_metin = (f"{host} • "
+                             f"{s.get('mesaj') or 'Fiyat okunamadı'}")
+            elif durum == "ilk":
+                rozet = ("İLK KAYIT", "mor")
+                durum_metin = "✔ Takip başlatıldı"
+                durum_renk = "yesil"
+                vurgu_renk = ROZET["mor"][1]
+            elif durum == "iptal":
+                rozet = ("DURDURULDU", "gri")
+                durum_metin = "■ Tarama iptal edildi"
+                durum_renk = "gri"
+        elif fiyat is not None:
+            para = self._para_ad(ad)
+            alt_metin = (f"{host} • Son fiyat: "
+                         f"{cekirdek.fiyat_bicimle(fiyat, para)}")
+            if yon == "▲":
+                rozet = ("FİYAT ARTTI", "kirmizi")
+                durum_metin = "↗ Geçmiş kayda göre artış"
+                durum_renk = "kirmizi"
+                vurgu_renk = ROZET["kirmizi"][1]
+            elif yon == "▼":
+                rozet = ("FİYAT DÜŞTÜ", "yesil")
+                durum_metin = "↘ Geçmiş kayda göre düşüş"
+                durum_renk = "yesil"
+                vurgu_renk = ROZET["yesil"][1]
+            elif yon == "=":
+                rozet = ("SABİT FİYAT", "cyan")
+                durum_metin = "✓ Değişim Yok"
+                durum_renk = "yesil"
+                vurgu_renk = ROZET["cyan"][1]
+
+        # --- kart iskeleti ---
+        kart = tk.Frame(self.kart_govde, bg=RENKLER["kart"],
+                        highlightthickness=1,
+                        highlightbackground=RENKLER["kenar"])
+        kart.pack(fill=X, pady=(0, 8))
+        tk.Frame(kart, bg=vurgu_renk, width=4).pack(side=LEFT, fill=Y)
+
+        ic = tk.Frame(kart, bg=RENKLER["kart"])
+        ic.pack(side=LEFT, fill=BOTH, expand=True, padx=(12, 14), pady=9)
+
+        ust = tk.Frame(ic, bg=RENKLER["kart"])
+        ust.pack(fill=X)
+        tk.Label(ust, text=ad, bg=RENKLER["kart"], fg=RENKLER["baslik"],
+                 font=("Segoe UI", 10, "bold")).pack(side=LEFT)
+        r_bg, r_fg = ROZET[rozet[1]]
+        tk.Label(ust, text=rozet[0], bg=r_bg, fg=r_fg,
+                 font=("Segoe UI", 8, "bold"), padx=8, pady=3,
+                 highlightthickness=1,
+                 highlightbackground=r_fg).pack(side=RIGHT)
+
+        tk.Label(ic, text=alt_metin, bg=RENKLER["kart"],
+                 fg=RENKLER["gri"], font=("Segoe UI", 9),
+                 anchor=W).pack(fill=X, pady=(4, 0))
+
+        tk.Label(ic, text=durum_metin, bg=RENKLER["kart"],
+                 fg=ROZET[durum_renk][1], font=("Segoe UI", 9, "bold"),
+                 anchor=W).pack(fill=X, pady=(5, 0))
+
+        # tıklama: kart → listede seç, çift tık → tarayıcıda aç
+        secim = lambda _e, a=ad: self._kart_sec(a)
+        acilis = lambda _e, a=ad: self._kart_ac(a)
+        self._kart_olay_bagla(kart, secim, acilis)
+
+    def _kart_sec(self, ad: str) -> None:
+        for iid in self.agac.get_children():
+            if self.agac.item(iid, "values")[0] == ad:
+                self.agac.selection_set(iid)
+                self.agac.see(iid)
+                break
+
+    def _kart_ac(self, ad: str) -> None:
+        u = self.urun_bul(ad)
+        if u and u.get("url"):
+            self._url_ac(u["url"])
 
     # ------------------------------------------------------------------
     #  Konsol
@@ -1010,6 +1712,7 @@ class Uygulama(tk.Tk):
         self.sayac_deg.set(f"{sayac} ürün"
                            + (f"  (filtre: '{arama}')" if arama else ""))
         self.sag_durum.set(self._sag_durum_metni())
+        self.kartlari_guncelle(son_fiyatlar)
 
     def _para_ad(self, ad: str) -> str:
         bag = cekirdek.db_ac()
@@ -1075,8 +1778,10 @@ class Uygulama(tk.Tk):
     # ------------------------------------------------------------------
     #  Ürün işlemleri
     # ------------------------------------------------------------------
-    def urun_ekle(self):
-        p = UrunPenceresi(self, "Yeni Ürün Ekle")
+    def urun_ekle(self, url_on: str = ""):
+        veri = ({"ad": "", "url": url_on, "selector": "", "not": ""}
+                if url_on else None)
+        p = UrunPenceresi(self, "Yeni Ürün Ekle", veri)
         self.wait_window(p)
         if not p.sonuc:
             return
@@ -1090,6 +1795,8 @@ class Uygulama(tk.Tk):
         self.liste_doldur()
         self.konsol_yaz(f"＋ Ürün eklendi: {p.sonuc['ad']}")
         self.durum_deg.set(f"Ürün eklendi: {p.sonuc['ad']}")
+        if url_on and hasattr(self, "url_on"):
+            self._url_on_bit()
 
     def urun_duzenle(self):
         ad = self.secili_urun()
@@ -1158,23 +1865,24 @@ class Uygulama(tk.Tk):
     # ------------------------------------------------------------------
     #  Tarama
     # ------------------------------------------------------------------
-    def tarama_baslat(self, secili: bool = False):
+    def tarama_baslat(self, secili: bool = False) -> bool:
         if self.tarama_suriyor:
             messagebox.showinfo("Tarama sürüyor",
                                 "Zaten bir tarama çalışıyor. Önce durdurun.")
-            return
+            return False
         urunler = self.ayar.get("urunler", [])
         if not urunler:
             messagebox.showinfo("Ürün yok",
-                                "Önce '+ Ürün Ekle' ile rakip ürün ekleyin.")
-            return
+                                "Önce sol taraftan URL ile rakip ürün "
+                                "ekleyin.")
+            return False
 
         secili_adlar = self.secili_urunler() if secili else None
         if secili and not secili_adlar:
             messagebox.showinfo("Seçim yok",
                                 "Taranacak ürünleri listeden seçin "
                                 "(Ctrl+ ile çoklu seçim).")
-            return
+            return False
 
         self.tarama_suriyor = True
         self.iptal_bayragi.clear()
@@ -1182,6 +1890,7 @@ class Uygulama(tk.Tk):
         self.secili_btn.state(["disabled"])
         self.durdur_btn.state(["!disabled"])
         self.ilerleme["value"] = 0
+        self._takip_guncelle()
         self.durum_deg.set("Taranıyor…")
         self.konsol_yaz("\n" + "=" * 60)
         self.konsol_yaz(f"▶ Tarama başladı — {datetime.now():%H:%M:%S}")
@@ -1211,6 +1920,7 @@ class Uygulama(tk.Tk):
             self._ana_kuyruk.put((self._tarama_bitti, sonuclar))
 
         threading.Thread(target=is_calistir, daemon=True).start()
+        return True
 
     def _tarama_bitti(self, sonuclar: list[dict]):
         self.tarama_suriyor = False
@@ -1231,8 +1941,12 @@ class Uygulama(tk.Tk):
             f"{degisen} değişiklik  ·  {hata} sorun")
         self.durum_deg.set("Tarama tamamlandı.")
         self.ilerleme_deger.set("Tamamlandı")
+        self._tekrar_planla()
 
     def tarama_durdur(self):
+        self.otomatik_takip = False
+        self._periyot_iptal()
+        self._takip_guncelle()
         if not self.tarama_suriyor:
             return
         self.iptal_bayragi.set()
@@ -1266,7 +1980,7 @@ class Uygulama(tk.Tk):
                 self.sonuc_agac.item(iid, tags=("ilk",))
         self.sonuc_agac.tag_configure("degisti",
                                       foreground=RENKLER["kirmizi"],
-                                      background="#fef2f2")
+                                      background="#2a1620")
         self.sonuc_agac.tag_configure("sorun",
                                       foreground=RENKLER["sari"])
         self.sonuc_agac.tag_configure("ilk",
@@ -1347,7 +2061,7 @@ class Uygulama(tk.Tk):
                     "pay": 62, "yorum": 76, "rozet": 64, "satis": 170,
                     "ciro": 190, "guven": 70}
         self.radar_agac = ttk.Treeview(sayfa, columns=kolonlar,
-                                       show="headings", height=14)
+                                       show="headings", height=7)
         for k in kolonlar:
             self.radar_agac.heading(k, text=basliklar[k])
             self.radar_agac.column(
@@ -1362,7 +2076,7 @@ class Uygulama(tk.Tk):
         self.radar_agac.grid(row=2, column=0, sticky=(N, S, E, W))
         r_d.grid(row=2, column=1, sticky=(N, S))
         r_y.grid(row=3, column=0, sticky=(W, E))
-        self.radar_agac.tag_configure("lider", background="#eff6ff",
+        self.radar_agac.tag_configure("lider", background="#0e2a3a",
                                       foreground=RENKLER["vurgu"])
 
         ttk.Label(
@@ -1537,6 +2251,280 @@ class Uygulama(tk.Tk):
         self._url_ac(str(rapor))
 
     # ------------------------------------------------------------------
+    #  İthalat Radarı (importyeti)
+    # ------------------------------------------------------------------
+    def _ithalat_sayfasi_ekle(self):
+        sayfa = ttk.Frame(self.ust_sayfa, style="TTk.TFrame", padding=6)
+        self.ust_sayfa.add(sayfa, text="  🌍 İthalat Radarı  ")
+        self.ithalat_sayfa = sayfa
+        sayfa.rowconfigure(2, weight=1)
+        sayfa.columnconfigure(0, weight=1)
+
+        # --- kontrol satırı ---
+        ust = ttk.Frame(sayfa, style="TTk.TFrame")
+        ust.grid(row=0, column=0, columnspan=2, sticky=(W, E), pady=(0, 6))
+
+        ttk.Label(ust, text="Firma / Marka:").pack(side=LEFT, padx=(0, 4))
+        self.ithalat_sorgu = StringVar(value="")
+        gir = ttk.Entry(ust, textvariable=self.ithalat_sorgu, width=34)
+        gir.pack(side=LEFT)
+        gir.bind("<Return>", lambda _e: self.ithalat_ara())
+
+        self.ithalat_ara_btn = ttk.Button(
+            ust, text="▶  Ara", command=self.ithalat_ara)
+        self.ithalat_ara_btn.pack(side=LEFT, padx=(6, 4))
+        self.ithalat_geri_btn = ttk.Button(
+            ust, text="⬅ Geri", command=self.ithalat_geri, state="disabled")
+        self.ithalat_geri_btn.pack(side=LEFT, padx=4)
+        ttk.Button(ust, text="📄 CSV Aktar",
+                   command=lambda: self._csv_aktar("ithalat")).pack(
+            side=LEFT, padx=4)
+        ttk.Button(ust, text="🌐 Tarayıcıda Aç",
+                   command=self.ithalat_tarayici).pack(side=LEFT, padx=4)
+
+        # --- özet ---
+        self.ithalat_ozet = StringVar(
+            value="Firma/marka adı yazıp '▶ Ara' deyin. Sonuçlara çift "
+                  "tıklayınca tedarikçiler/müşteriler açılır. "
+                  "Veriler: ABD denizyolu ithalat kayıtları (ImportYeti).")
+        ttk.Label(sayfa, textvariable=self.ithalat_ozet,
+                  font=("Segoe UI", 10, "bold")).grid(
+            row=1, column=0, sticky=(W, E), pady=(0, 6))
+
+        # --- tablo ---
+        self.ithalat_agac = ttk.Treeview(
+            sayfa, columns=("tur", "ad", "ulke", "adres", "sefer",
+                            "son_sefer"), show="headings", height=7)
+        r_d = ttk.Scrollbar(sayfa, orient="vertical",
+                            command=self.ithalat_agac.yview)
+        r_y = ttk.Scrollbar(sayfa, orient="horizontal",
+                            command=self.ithalat_agac.xview)
+        self.ithalat_agac.configure(yscrollcommand=r_d.set,
+                                    xscrollcommand=r_y.set)
+        self.ithalat_agac.grid(row=2, column=0, sticky=(N, S, E, W))
+        r_d.grid(row=2, column=1, sticky=(N, S))
+        r_y.grid(row=3, column=0, sticky=(W, E))
+        self.ithalat_agac.bind("<Double-1>", self.ithalat_cift_tik)
+
+        self.ithalat_mod = "arama"
+        self.ithalat_veri: dict | None = None
+        self.ithalat_gecmis: list[tuple[str, dict]] = []
+        self.ithalat_url_harita: dict[str, str] = {}
+        self.ithalat_suriyor = False
+        self.ithalat_surec = None
+        self._ithalat_kolonlari_kur("arama")
+
+    ITHALAT_KOLONLAR = {
+        "arama": [("tur", "Tür", 74), ("ad", "Ad", 232), ("ulke", "Ülke", 56),
+                  ("adres", "Adres", 330), ("sefer", "Sefer", 74),
+                  ("son_sefer", "Son Sefer", 96)],
+        "detay": [("ad", "Tedarikçi / Müşteri", 268),
+                  ("ulke", "Ülke", 150), ("sefer", "Sefer", 76),
+                  ("urunler", "Ürün Grupları", 430)],
+    }
+
+    def _ithalat_kolonlari_kur(self, mod: str):
+        kolonlar = self.ITHALAT_KOLONLAR[mod]
+        self.ithalat_agac["columns"] = [k for k, _b, _g in kolonlar]
+        for k, baslik, genislik in kolonlar:
+            self.ithalat_agac.heading(k, text=baslik)
+            self.ithalat_agac.column(
+                k, width=genislik,
+                anchor=W if k in ("tur", "ad", "adres", "urunler") else CENTER)
+
+    def ithalat_ara(self):
+        sorgu = self.ithalat_sorgu.get().strip()
+        if not sorgu:
+            messagebox.showwarning("Sorgu yok",
+                                   "Firma/marka adı yazın.")
+            return
+        if self.ithalat_veri:
+            self.ithalat_gecmis.append((self.ithalat_mod, self.ithalat_veri))
+            del self.ithalat_gecmis[:-20]
+        self._ithalat_calistir(
+            ["ara", sorgu, "--sayfa", "1"],
+            lambda v: self._ithalat_goster("arama", v),
+            f"🌍 '{sorgu}' aranıyor…")
+
+    def ithalat_git(self, url: str):
+        if not url:
+            return
+        if self.ithalat_veri:
+            self.ithalat_gecmis.append((self.ithalat_mod, self.ithalat_veri))
+            del self.ithalat_gecmis[:-20]
+        tur = "firma" if url.startswith("company/") else "tedarikci"
+        self._ithalat_calistir(
+            [tur, url],
+            lambda v: self._ithalat_goster(v.get("tur", "detay"), v),
+            f"🌍 {url} yükleniyor…")
+
+    def ithalat_geri(self):
+        if not self.ithalat_gecmis:
+            return
+        mod, veri = self.ithalat_gecmis.pop()
+        self._ithalat_goster(mod, veri)
+
+    def ithalat_cift_tik(self, _olay):
+        iid = self.ithalat_agac.focus()
+        url = self.ithalat_url_harita.get(iid, "")
+        if url and not self.ithalat_suriyor:
+            self.ithalat_git(url)
+
+    def ithalat_tarayici(self):
+        if self.ithalat_mod == "arama":
+            sorgu = self.ithalat_sorgu.get().strip()
+            if not sorgu:
+                messagebox.showinfo("Yok",
+                                    "Önce bir arama yapın ya da satır seçin.")
+                return
+            url = f"https://www.importyeti.com/search?q={quote(sorgu)}"
+        elif self.ithalat_veri:
+            url = f"https://www.importyeti.com/{self.ithalat_veri.get('url', '')}"
+        else:
+            messagebox.showinfo("Yok",
+                                "Önce bir arama yapın ya da satır seçin.")
+            return
+        self._url_ac(url)
+
+    def _ithalat_geri_guncelle(self):
+        durum = "disabled" if not self.ithalat_gecmis else "!disabled"
+        self.ithalat_geri_btn.state([durum])
+
+    def _ithalat_calistir(self, komutlar: list[str], dolgu, bekleme: str):
+        if self.ithalat_suriyor:
+            self.konsol_yaz("[!] İthalat Radarı zaten çalışıyor…")
+            return
+        kok = ithalat_kok_bul()
+        if not (kok / "ithalat").is_dir():
+            messagebox.showerror(
+                "ithalat-radar bulunamadı",
+                f"ithalat-radar klasörü yok:\n{kok}")
+            return
+
+        json_yol = kok / "data" / "out" / "ithalat_gui.json"
+        if json_yol.exists():
+            json_yol.unlink()
+
+        komut = [sys.executable, "-m", "ithalat", *komutlar,
+                 "--json", str(json_yol)]
+
+        self.ithalat_suriyor = True
+        self.ithalat_ara_btn.state(["disabled"])
+        self._ithalat_geri_guncelle()
+        self.ithalat_geri_btn.state(["disabled"])
+        self.ithalat_ozet.set(bekleme)
+        self.konsol_yaz(bekleme)
+        self.durum_deg.set(bekleme)
+        self.ilerleme.configure(mode="indeterminate")
+        self.ilerleme.start(12)
+
+        yazici = KuyrukYazici(self.kuyruk)
+
+        def is_calistir():
+            kod = -1
+            hata = None
+            try:
+                ortam = dict(os.environ, PYTHONIOENCODING="utf-8")
+                surec = subprocess.Popen(
+                    komut, cwd=str(kok), stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                    errors="replace", bufsize=1, env=ortam)
+                self.ithalat_surec = surec
+                for satir in surec.stdout:
+                    satir = satir.rstrip()
+                    if satir:
+                        yazici(satir)
+                kod = surec.wait()
+            except Exception:
+                hata = traceback.format_exc()
+            finally:
+                self.ithalat_surec = None
+
+            veri = None
+            if kod == 0 and json_yol.exists():
+                try:
+                    veri = json.loads(json_yol.read_text(encoding="utf-8"))
+                except Exception:
+                    hata = traceback.format_exc()
+            self._ana_kuyruk.put(
+                (lambda _v: self._ithalat_bitti(veri, kod, hata, dolgu), None))
+
+        threading.Thread(target=is_calistir, daemon=True).start()
+
+    def _ithalat_bitti(self, veri: dict | None, kod: int,
+                       hata: str | None, dolgu):
+        self.ithalat_suriyor = False
+        self.ithalat_ara_btn.state(["!disabled"])
+        self._ithalat_geri_guncelle()
+        try:
+            self.ilerleme.stop()
+            self.ilerleme.configure(mode="determinate")
+        except Exception:
+            pass
+        self.ilerleme["value"] = 100 if veri else 0
+
+        if hata:
+            self.konsol_yaz("[!] İthalat Radarı hatası:\n" + hata)
+        if not veri:
+            mesaj = (f"Tamamlanamadı (kod {kod}). Konsola bakın."
+                     if kod != 0 else "Sonuç alınamadı.")
+            self.ithalat_ozet.set(mesaj)
+            self.durum_deg.set("İthalat Radarı tamamlanmadı.")
+            return
+        dolgu(veri)
+
+    def _ithalat_goster(self, mod: str, veri: dict):
+        self.ithalat_mod = mod
+        self.ithalat_veri = veri
+        self._ithalat_kolonlari_kur(
+            "arama" if mod == "arama" else "detay")
+        self.ithalat_agac.delete(*self.ithalat_agac.get_children())
+        self.ithalat_url_harita.clear()
+
+        if mod == "arama":
+            for s in veri.get("sonuclar", []):
+                iid = self.ithalat_agac.insert(
+                    "", END, values=(s.get("tur"), s.get("ad"),
+                                     s.get("ulke"), s.get("adres"),
+                                     _sayi(s.get("sefer")),
+                                     s.get("son_sefer")))
+                self.ithalat_url_harita[iid] = s.get("url", "")
+            ozet = (f"'{veri.get('sorgu', '')}' · {veri.get('toplam', 0)} "
+                    f"sonuç · sayfa {veri.get('sayfa', 1)}/"
+                    f"{veri.get('toplam_sayfa', 1)} · kalan hak: "
+                    f"{veri.get('kalan_hak', '-')}")
+            durum = f"İthalat Radarı: {veri.get('toplam', 0)} sonuç bulundu."
+            self.konsol_yaz(f"🌍 Arama tamam: {veri.get('toplam', 0)} sonuç "
+                            f"(gösterilen: {len(veri.get('sonuclar', []))})")
+        else:
+            for s in veri.get("satirlar", []):
+                iid = self.ithalat_agac.insert(
+                    "", END, values=(s.get("ad"), s.get("ulke"),
+                                     _sayi(s.get("sefer")),
+                                     s.get("urunler")))
+                self.ithalat_url_harita[iid] = s.get("url", "")
+            oz = veri.get("ozet", {}) or {}
+            en_yogun = sorted(veri.get("ulkeler") or [],
+                              key=lambda u: -(u.get("sefer") or 0))[:3]
+            ilk_ulkeler = ", ".join(
+                f"{u['ulke']} ({_sayi(u.get('sefer'))})"
+                for u in en_yogun)
+            ozet = (f"{veri.get('ad', '')} · {veri.get('adres', '')} · "
+                    f"{oz.get('bagli_sayisi', 0)} bağlantı · "
+                    f"{oz.get('ulke_sayisi', 0)} ülke · son sevkiyat: "
+                    f"{oz.get('son_sevkiyat') or '-'}")
+            if ilk_ulkeler:
+                ozet += f" · Yoğun: {ilk_ulkeler}"
+            durum = f"İthalat Radarı: {veri.get('ad', '')} yüklendi."
+            self.konsol_yaz(f"📄 {veri.get('ad', '')}: "
+                            f"{len(veri.get('satirlar', []))} bağlantı, "
+                            f"{len(veri.get('ulkeler') or [])} ülke")
+
+        self.ithalat_ozet.set(ozet)
+        self.durum_deg.set(durum)
+        self.ust_sayfa.select(self.ithalat_sayfa)
+
+    # ------------------------------------------------------------------
     #  Seçici bul
     # ------------------------------------------------------------------
     def secici_bul(self):
@@ -1612,19 +2600,24 @@ class Uygulama(tk.Tk):
         fiyatlar = [s[1] for s in satirlar]
         para = satirlar[0][2] or ""
 
-        fig = Figure(figsize=(5.4, 3.2), dpi=96, facecolor="white")
+        fig = Figure(figsize=(5.4, 2.6), dpi=96, facecolor="#0d1526")
         eksen = fig.add_subplot(111)
         eksen.plot(tarihler, fiyatlar, marker="o", markersize=5,
                    color=RENKLER["vurgu"], linewidth=2)
         eksen.fill_between(range(len(fiyatlar)), fiyatlar,
-                           min(fiyatlar) * 0.98, alpha=0.10,
+                           min(fiyatlar) * 0.98, alpha=0.15,
                            color=RENKLER["vurgu"])
+        eksen.set_facecolor("#0d1526")
         eksen.set_title(ad[:44], fontsize=10, fontweight="bold",
                         color=RENKLER["baslik"])
-        eksen.set_ylabel(fiyatlar and para or "", fontsize=9)
-        eksen.tick_params(axis="x", rotation=45, labelsize=7)
-        eksen.tick_params(axis="y", labelsize=8)
-        eksen.grid(True, alpha=0.3)
+        eksen.set_ylabel(fiyatlar and para or "", fontsize=9,
+                         color=RENKLER["metin"])
+        eksen.tick_params(axis="x", rotation=45, labelsize=7,
+                          colors=RENKLER["metin"])
+        eksen.tick_params(axis="y", labelsize=8, colors=RENKLER["metin"])
+        eksen.grid(True, alpha=0.25, color=RENKLER["kenar"])
+        for kenar in eksen.spines.values():
+            kenar.set_color(RENKLER["kenar"])
         en_az, en_cok = min(fiyatlar), max(fiyatlar)
         eksen.annotate(f"En düşük: {cekirdek.fiyat_bicimle(en_az, para)}",
                        xy=(0.02, 0.04), xycoords="axes fraction", fontsize=8,
@@ -1722,7 +2715,7 @@ class Uygulama(tk.Tk):
         self.gorsel_liste.selection_clear(0, END)
         self.gorsel_liste.selection_set(0)
         self.gorsel_goster(liste[0])
-        self.alt_sayfa.select(1)
+        self.ust_sayfa.select(self.gorsel_sayfa)
 
     _gorsel_liste_veri: list[str] = []
 
@@ -1820,6 +2813,7 @@ class Uygulama(tk.Tk):
             return
         self.ayar["ayarlar"] = {**ayar, **p.sonuc}
         self._config_kaydet()
+        self._alanlari_yukle()
         self.konsol_yaz("⚙ Ayarlar kaydedildi.")
         self.durum_deg.set("Ayarlar kaydedildi.")
 
@@ -1915,6 +2909,23 @@ class Uygulama(tk.Tk):
                      "Yorum", "Rozetli ürün", "30g alt", "30g üst",
                      "Ciro alt ₺", "Ciro üst ₺", "Güven"], satirlar)
 
+        if tur == "ithalat":
+            veri = getattr(self, "ithalat_veri", None)
+            if not veri:
+                return None
+            if self.ithalat_mod == "arama":
+                satirlar = [[s.get("tur"), s.get("ad"), s.get("ulke"),
+                             s.get("adres"), s.get("sefer"),
+                             s.get("son_sefer")]
+                            for s in veri.get("sonuclar", [])]
+                return (["Tür", "Ad", "Ülke", "Adres", "Sefer", "Son Sefer"],
+                        satirlar)
+            satirlar = [[s.get("ad"), s.get("ulke"), s.get("sefer"),
+                         s.get("urunler"), s.get("url")]
+                        for s in veri.get("satirlar", [])]
+            return (["Bağlantı", "Ülke", "Sefer", "Ürün Grupları", "Slug"],
+                    satirlar)
+
         return None
 
     def _csv_aktar(self, tur: str):
@@ -1926,6 +2937,9 @@ class Uygulama(tk.Tk):
             elif tur == "radar":
                 messagebox.showinfo("Veri yok",
                                     "Önce radar taraması yapın.")
+            elif tur == "ithalat":
+                messagebox.showinfo("Veri yok",
+                                    "Önce İthalat Radarı'nda arama yapın.")
             return
         baslik, satirlar = uretim
 
@@ -2045,6 +3059,8 @@ class Uygulama(tk.Tk):
                                        "istiyor musunuz?"):
                 return
             self.iptal_bayragi.set()
+        self.otomatik_takip = False
+        self._periyot_iptal()
         self._config_kaydet()
         self.destroy()
 

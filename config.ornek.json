@@ -2,6 +2,8 @@
   "ayarlar": {
     "bekleme_saniye": 3,
     "esik_yuzde": 0,
+    "periyot_dakika": 15,
+    "bildirim": "telegram",
     "telegram_token": "",
     "telegram_chat_id": ""
   },

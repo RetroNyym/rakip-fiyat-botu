@@ -66,3 +66,7 @@ config.json
 
 # --- Zamanlayıcı çıktısı ---
 zamanlama_tarama.bat
+
+# --- Radar modüllerinin çalışma çıktıları (debug HTML/JSON/rapor) ---
+pazaryeri-radar/data/out/
+ithalat-radar/data/out/

@@ -345,6 +345,9 @@ def tum_ucretler(db_yol: Path | None = None) -> list[tuple]:
 def telegram_gonder(ayar: dict, mesaj: str,
                     log: Optional[LogFn] = None) -> bool:
     log = _log_al(log)
+    if str(ayar.get("bildirim") or "").lower() == "konsol":
+        # Arayüzde "Sadece Konsol" seçildi → Telegram'a gönderme.
+        return False
     token = (ayar.get("telegram_token") or "").strip()
     chat_id = (ayar.get("telegram_chat_id") or "").strip()
     if not token or not chat_id:
@@ -664,7 +667,10 @@ def tarama_yap(config: dict,
         log(f"📊 {len(degisen)} fiyat değişikliği bulundu.")
         if uyari_satirlari:
             mesaj = "🔔 <b>Rakip fiyat değişikliği</b>\n\n" + "\n\n".join(uyari_satirlari)
-            if telegram_gonder(ayar, mesaj, log):
+            if str(ayar.get("bildirim") or "").lower() == "konsol":
+                log("🔕 Telegram kapalı (Sadece Konsol) — değişiklikler "
+                    "konsol ve raporda.")
+            elif telegram_gonder(ayar, mesaj, log):
                 log(f"✅ {len(degisen)} değişiklik Telegram'a gönderildi.")
             else:
                 log("⚠️ Değişiklikler var ama Telegram ayarlanmamış "
