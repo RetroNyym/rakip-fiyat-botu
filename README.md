@@ -26,6 +26,7 @@
 | 🖼 **Görsel** | Rakip ürününün görselini arayüzde gösterir |
 | 📊 **Rapor** | En düşük / en yüksek / toplam değişim / dalgalanma aralığı |
 | 📄 **CSV** | Liste, sonuç, rapor ve geçmişi Excel uyumlu CSV olarak aktarır |
+| 🔑 **Lisans** | Deneme modu: 5 sorgu hakkı (Ürün Arama + Tarama + İthalat); sınırda lisans anahtarıyla kilit ekranı |
 | ⏰ **Otomasyon** | Görev Zamanlayıcı'ya tek tıkla günlük tarama kurar |
 
 **Fiyat ayrıştırma** Türkçe ve uluslararası formatları ayırt eder:
@@ -125,7 +126,8 @@ python rakip_takip.py --config baska.json
       "selector": "span.price",
       "not": "opsiyonel not"
     }
-  ]
+  ],
+  "lisans": ""
 }
 ```
 
@@ -138,6 +140,7 @@ python rakip_takip.py --config baska.json
 | `esik_yuzde` | `0` = her değişimde uyar. `5` = %5 üstü değişimlerde uyar |
 | `telegram_token` | @BotFather'dan alınan bot token'ı |
 | `telegram_chat_id` | @userinfobot'a yazarak aldığın chat ID |
+| `lisans` | Lisans anahtarı (`RN1-…`). Geçerliyse deneme hakkı sınırı kalkar; **Araçlar → Lisans…** ile girilir |
 
 > CSS seçicisini bilmiyorsan arayüzde `🔍 Seçici Bul` butonu sayfayı tarayıp
 > aday listesi çıkarır; çift tıklayınca ürüne uygulanır.
@@ -150,14 +153,17 @@ python rakip_takip.py --config baska.json
 rakip-fiyat-botu/
 ├── gui.py            # Masaüstü arayüz (Tkinter)
 ├── rakip_takip.py    # Çekirdek: tarama, ayrıştırma, DB, Telegram, rapor
+├── lisans.py         # 🔑 Deneme hakkı (5 sorgu) + lisans anahtar doğrulama
+├── lisans_uret.py    # 🔑 Satıcı için lisans anahtarı üretir
 ├── config.json       # Ayarlar + rakip ürün listesi (git'e girmez)
 ├── config.ornek.json # Şablon — ilk açılışta config.json buna kopyalanır
 ├── requirements.txt  # Çalışma bağımlılıkları
 ├── requirements.gelistirme.txt  # Test/CI bağımlılıkları
 ├── test_rakip_takip.py   # Çekirdek testleri (58 durum)
 ├── test_gui.py           # Arayüz duman + regresyon testleri (39 durum)
-├── test_urun_arama.py    # Ürün Arama modülü + sekmesi testleri (21 durum)
+├── test_urun_arama.py    # Ürün Arama modülü + sekmesi testleri (30 durum)
 ├── test_ithalat_radar.py # İthalat Radarı ayrıştırma testleri (18 durum)
+├── test_lisans.py        # Lisans + deneme hakkı testleri (18 durum)
 ├── baslat.bat        # Arayüzü başlat (çift tık)
 ├── tarama.bat        # Zamanlanmış CLI taraması
 ├── pazaryeri-radar/  # 🏆 Rakip Radar modülü (satıcı toplama + rapor)
@@ -198,8 +204,9 @@ Ne kapsanıyor:
 | Tarama (uçtan uca) | ilk kayıt / değişti / değişmedi / fiyat yok / robots.txt |
 | Telegram | token yokken **ağ çağrısı yapmadan** `False` |
 | Arayüz | liste + canlı arama, seçim, geçmiş, grafik, rapor, CSV, konsol |
-| Ürün Arama | 4 site HTML örnekleriyle ayrıştırma + GUI sekmesi (ağsız) |
+| Ürün Arama | 9 site HTML örnekleriyle ayrıştırma + GUI sekmesi (ağsız) |
 | İthalat Radarı | HTML/JSON ayrıştırma örnek dosyalarla **ağsız** test edilir |
+| Lisans | anahtar HMAC doğrulama, 5 sorgu sınırı, sayaç tahrifi → kilit, GUI koruması |
 | CLI | `--help`, hata kodları, eksik config mesajı |
 
 CI (GitHub Actions) her push'ta **2 işletim sistemi × 3 Python sürümü**

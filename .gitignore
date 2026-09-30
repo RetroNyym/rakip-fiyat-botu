@@ -60,6 +60,9 @@ fiyatlar.db-shm
 # Şablon için: config.ornek.json (bu depoda), gerçek dosya: config.json
 config.json
 
+# Deneme hakkı sayacı (yerel, HMAC mühürlü → yayına girmez)
+data/limit.json
+
 # İndirilen görseller
 .gorseller/
 .cache/

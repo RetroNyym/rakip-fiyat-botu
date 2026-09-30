@@ -125,7 +125,7 @@ Pencere çok daralırsa otomatik gizlenirler.
 
 ## 7) Marka kutusu (sadece görünüm)
 ![Marka](docs/rehber/09-marka.png)
-`RAKİP FİYAT BOTU v2.5` — logo ve slogan. **Tıklanmaz.**
+`RAKİP FİYAT BOTU v2.6` — logo ve slogan. **Tıklanmaz.**
 
 ## 8) Form alanları (4 adet)
 ![Alanlar](docs/rehber/10-alanlar.png)
@@ -436,12 +436,29 @@ Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede bo�
 
 ---
 
+## 25) 🔑 Lisans / Deneme Sınırı
+
+| Kısım | Ne işe yarar |
+|---|---|
+| **Deneme hakkı** | Kurulumdan sonra **5 sorgu** hakkınız vardır: Ürün Arama sorguları, elle başlattığınız taramalar ve İthalat Radarı aramaları sayılır |
+| **Sınır dolunca** | **"Lisans Gerekli"** penceresi açılır — geçerli anahtar girilene kadar işlem başlamaz |
+| **Lisans penceresi** | `RN1-…` biçimindeki anahtarı yazıp **Doğrula**: `config.json` → `lisans` alanına kaydedilir ve kalıcı olarak açılır |
+| **Menü** | **Araçlar → Lisans…** — kalan hak durumunu gösterir, anahtar girmeyi sağlar |
+| **Otomatik takip** | Kendiliğinden başlayan tekrar taramalar **hak yemez** — yalnızca elle başlattıklarınız sayılır |
+| **Sayaç dosyası** | `data/limit.json` (yalnızca bilgisayarınızda tutulur, git'e girmez) |
+| **Üretim** | Anahtarlar satıcı tarafından `python lisans_uret.py` ile üretilir |
+
+> Kilit penceresi görseli bu rehberde yoktur; açılışta ve sınır dolduğunda
+> konsolda kalan hak sayısı yazılır.
+
+---
+
 # 📋 MENÜ ÇUBUĞU (pencerenin en üstündeki yazılar)
 
 | Menü | Komutlar ve anlamları |
 |---|---|
 | **Dosya** | `Config Aç…` ayar dosyasını seç · `Config Farklı Kaydet…` yedekle · `Ürün Listesini CSV Aktar…` · `Tarama Sonuçlarını CSV Aktar…` · `Raporu CSV Aktar…` · `Çıkış` |
-| **Araçlar** | `Tümünü Tara` (= ▶ Tarama) · `Seçili Ürünleri Tara` (= ▶ Seçili) · `Durdur` · `Radar Taraması` · `Radar Sekmesine Git` · `Seçici Bul…` · `Telegram Testi` (boş mesaj gönderip token'ı dener) · `Ayarlar…` · `Görev Zamanlayıcıya Ekle (Windows)` (program kapalıyken bile saatli çalışsın) · `Config Klasörünü Aç` |
+| **Araçlar** | `Tümünü Tara` (= ▶ Tarama) · `Seçili Ürünleri Tara` (= ▶ Seçili) · `Durdur` · `Radar Taraması` · `Radar Sekmesine Git` · `Seçici Bul…` · `Telegram Testi` (boş mesaj gönderip token'ı dener) · `Ayarlar…` · `Lisans…` (deneme hakkı durumu + anahtar girme) · `Görev Zamanlayıcıya Ekle (Windows)` (program kapalıyken bile saatli çalışsın) · `Config Klasörünü Aç` |
 | **Görünüm** | `Konsolu Temizle` · `Fiyat Geçmişini Yenile` · `Raporu Yenile` |
 | **Yardım** | `Hakkında` · `Kullanım Kılavuzu` |
 
@@ -489,9 +506,10 @@ Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede bo�
 | Radar: "Radar tamamlanamadı (kod 2)" | Konsola bakın: "bağlantı hatası/TLS" yazıyorsa **ağ güvenliği duvarı** pazaryerlerini engelliyordur (tarayıcıda da açılmıyorsa VPN/ağ yöneticisi gerekir); "ürün kartı bulunamadı" yazıyorsa sayfa yapısı değişmiştir |
 | İthalat Radarı: "Tamamlanamadı (kod 2)" | Konsola bakın: "bağlantı/TLS" hatasıysa **importyeti.com engelliyordur** (VPN deneyin); "JSON değil" yazıyorsa site tasarımı değişmiş olabilir. Sonuç tablosu boşsa o isimle kayıt yoktur — İngilizce isim deneyin (*nike*, *IKEA*) |
 | Ürün Araması'nda site ✗ | eBay/AliExpress/Çiçeksepeti → güvenlik duvarı engeli, **VPN ile açılır**; Etsy → captcha, tekrar deneyin/VPN; diğer siteler etkilenmez |
+| **"Lisans Gerekli"** penceresi açıldı | Deneme hakkınız doldu (5 sorgu) — `RN1-…` anahtarı girip **Doğrula**'ya basın (menü: `Araçlar → Lisans…`) |
 | CSV Excel'de bozuk açılıyor | Sorun yok — dosyalar UTF-8 (BOM) ile yazılır; yine de bozuksa Excel'de "Veri → Metinden" ile açın |
 
 ---
 
-*Rehber, programın v2.5 arayüzüne göre hazırlanmıştır. Görseller:
+*Rehber, programın v2.6 arayüzüne göre hazırlanmıştır. Görseller:
 [`docs/rehber/`](docs/rehber/) klasöründedir.*

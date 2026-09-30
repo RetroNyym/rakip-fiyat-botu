@@ -64,6 +64,7 @@ except ImportError:
     MPL_VAR = False
 
 import rakip_takip as cekirdek
+import lisans
 
 
 # ==========================================================================
@@ -583,6 +584,7 @@ class Uygulama(tk.Tk):
         self.liste_doldur()
         self._alanlari_yukle()
         self._kuyruk_isle()
+        self._lisans_notu()
         self.protocol("WM_DELETE_WINDOW", self._kapat)
 
     def _stil_kur(self) -> None:
@@ -695,6 +697,112 @@ class Uygulama(tk.Tk):
         except Exception as hata:
             messagebox.showerror("Kayıt hatası", f"Config kaydedilemedi:\n{hata}")
 
+    # ------------------------------------------------------------------
+    #  Lisans / deneme hakkı
+    # ------------------------------------------------------------------
+    def _lisans_notu(self) -> None:
+        """Açılışta kalan deneme hakkını konsola yazar (test modunda susar)."""
+        if os.environ.get("RIYA_TESTI") == "1":
+            return
+        if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
+            self.konsol_yaz("🔑 Lisans geçerli — tüm özellikler açık.")
+            return
+        kalan = lisans.hak_kalan()
+        self.konsol_yaz(f"🎫 Deneme: {kalan}/{lisans.HAK_SINIRI} sorgu "
+                        "hakkınız var — Araçlar → Lisans…")
+
+    def _hak_tuket(self, islem: str) -> bool:
+        """Bir sorgu hakkı harcar; sınır dolduysa lisans penceresi açar.
+
+        Lisans geçerliyse veya test modu (RIYA_TESTI=1) açıkken harcanmaz.
+        """
+        if os.environ.get("RIYA_TESTI") == "1":
+            return True
+        if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
+            return True
+        if lisans.hak_tuket():
+            kalan = lisans.hak_kalan()
+            not_ = "SON HAK!" if kalan == 0 else f"kalan {kalan} hak"
+            self.konsol_yaz(f"🎫 Deneme hakkı kullanıldı ({islem}) — {not_}.")
+            if kalan == 0:
+                self.konsol_yaz("[!] Sonraki işlemler için lisans anahtarı "
+                                "gerekir — Araçlar → Lisans…")
+            return True
+        self.durum_deg.set("Deneme hakkı doldu — lisans gerekli.")
+        self._lisans_penceresi(
+            "Lisans Gerekli",
+            f"Deneme hakkınız doldu ({lisans.HAK_SINIRI} sorgu).\n"
+            f"“{islem}” işlemine devam etmek için lisans anahtarı girin.")
+        return lisans.anahtar_gecerli(self.ayar.get("lisans") or "")
+
+    def _lisans_penceresi(self, baslik: str, mesaj: str) -> bool:
+        """Lisans penceresi açar; geçerli anahtar girilirse True döner."""
+        pencere = tk.Toplevel(self)
+        pencere.title(baslik)
+        pencere.transient(self)
+        pencere.resizable(False, False)
+        pencere.configure(bg=RENKLER["panel"])
+
+        govde = tk.Frame(pencere, bg=RENKLER["panel"], padx=18, pady=14)
+        govde.pack(fill="both", expand=True)
+
+        tk.Label(govde, text="🔑 Lisans Anahtarı", bg=RENKLER["panel"],
+                 fg=RENKLER["vurgu"],
+                 font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        tk.Label(govde, text=mesaj, bg=RENKLER["panel"], fg=RENKLER["metin"],
+                 font=("Segoe UI", 9), justify="left",
+                 wraplength=380).pack(anchor="w", pady=(6, 10))
+
+        giris = ttk.Entry(govde, width=34, font=("Consolas", 11))
+        giris.pack(anchor="w", ipady=3)
+        giris.insert(0, self.ayar.get("lisans") or "")
+        hata_deg = tk.StringVar(value="")
+        tk.Label(govde, textvariable=hata_deg, bg=RENKLER["panel"],
+                 fg="#ff6b6b", font=("Segoe UI", 9)).pack(anchor="w",
+                                                          pady=(6, 0))
+
+        def dogrula(_event=None):
+            deger = giris.get().strip()
+            if lisans.anahtar_gecerli(deger):
+                self.ayar["lisans"] = deger
+                self._config_kaydet()
+                self.konsol_yaz("✔ Lisans doğrulandı — tüm özellikler açık.")
+                pencere.destroy()
+            else:
+                hata_deg.set("Geçersiz anahtar. Lütfen tekrar deneyin.")
+                giris.delete(0, "end")
+
+        dugmeler = tk.Frame(govde, bg=RENKLER["panel"])
+        dugmeler.pack(anchor="e", pady=(14, 0))
+        ttk.Button(dugmeler, text="Doğrula",
+                   command=dogrula).pack(side="right")
+        ttk.Button(dugmeler, text="Kapat",
+                   command=pencere.destroy).pack(side="right", padx=(0, 8))
+        pencere.bind("<Return>", dogrula)
+
+        pencere.update_idletasks()
+        x = self.winfo_rootx() + max(
+            (self.winfo_width() - pencere.winfo_width()) // 2, 0)
+        y = self.winfo_rooty() + max(
+            (self.winfo_height() - pencere.winfo_height()) // 2, 0)
+        pencere.geometry(f"+{x}+{y}")
+        giris.focus_set()
+        pencere.grab_set()
+        self.wait_window(pencere)
+        return lisans.anahtar_gecerli(self.ayar.get("lisans") or "")
+
+    def lisans_goster(self) -> None:
+        """Araçlar → Lisans… — durumu gösterip anahtar girme penceresini açar."""
+        if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
+            mesaj = ("Lisansınız geçerli — tüm özellikler açık.\n"
+                     "Yeni bir anahtar girmek için aşağıya yazın.")
+        else:
+            kalan = lisans.hak_kalan()
+            mesaj = (f"Deneme: {kalan}/{lisans.HAK_SINIRI} sorgu "
+                     "hakkınız kaldı.\nLisans anahtarı girerek kilidi "
+                     "kaldırabilirsiniz.")
+        self._lisans_penceresi("Lisans", mesaj)
+
     def _menu_yap(self, ebeveyn=None) -> tk.Menu:
         """Karanlık temalı menü üretir."""
         return tk.Menu(ebeveyn or self, tearoff=0,
@@ -745,6 +853,7 @@ class Uygulama(tk.Tk):
         arac.add_command(label="Telegram Testi", command=self.telegram_test)
         arac.add_command(label="Ayarlar…", command=self.ayarlar_ac,
                          accelerator="Ctrl+,")
+        arac.add_command(label="Lisans…", command=self.lisans_goster)
         arac.add_separator()
         arac.add_command(label="Görev Zamanlayıcıya Ekle (Windows)",
                          command=self._zamanlayici_kur)
@@ -788,7 +897,7 @@ class Uygulama(tk.Tk):
         tk.Label(sol, text="FİYAT TAKİP BOTU", bg=RENKLER["baslik_bant"],
                  fg=RENKLER["baslik"],
                  font=("Segoe UI", 13, "bold")).pack(side=LEFT, padx=(7, 0))
-        tk.Label(sol, text=" v2.5 ", bg=RENKLER["vurgu"], fg="#06121f",
+        tk.Label(sol, text=" v2.6 ", bg=RENKLER["vurgu"], fg="#06121f",
                  font=("Segoe UI", 8, "bold"), padx=5, pady=1
                  ).pack(side=LEFT, padx=(8, 0))
         self._rozetler = []
@@ -902,7 +1011,7 @@ class Uygulama(tk.Tk):
         tk.Label(satir, text="RAKİP FİYAT BOTU", bg=RENKLER["panel"],
                  fg=RENKLER["baslik"],
                  font=("Segoe UI", 12, "bold")).pack(side=LEFT)
-        tk.Label(satir, text=" v2.5 ", bg=RENKLER["vurgu"], fg="#06121f",
+        tk.Label(satir, text=" v2.6 ", bg=RENKLER["vurgu"], fg="#06121f",
                  font=("Segoe UI", 8, "bold"), padx=4
                  ).pack(side=LEFT, padx=(6, 0))
         tk.Label(marka_sag,
@@ -1599,7 +1708,7 @@ class Uygulama(tk.Tk):
         self._periyot_zamanlayici = None
         if not self.otomatik_takip:
             return
-        if not self.tarama_baslat():
+        if not self.tarama_baslat(hak=False):
             self.otomatik_takip = False
             self._takip_guncelle()
 
@@ -2076,7 +2185,7 @@ class Uygulama(tk.Tk):
     # ------------------------------------------------------------------
     #  Tarama
     # ------------------------------------------------------------------
-    def tarama_baslat(self, secili: bool = False) -> bool:
+    def tarama_baslat(self, secili: bool = False, hak: bool = True) -> bool:
         if self.tarama_suriyor:
             messagebox.showinfo("Tarama sürüyor",
                                 "Zaten bir tarama çalışıyor. Önce durdurun.")
@@ -2093,6 +2202,9 @@ class Uygulama(tk.Tk):
             messagebox.showinfo("Seçim yok",
                                 "Taranacak ürünleri listeden seçin "
                                 "(Ctrl+ ile çoklu seçim).")
+            return False
+
+        if hak and not self._hak_tuket("Tarama"):
             return False
 
         self.tarama_suriyor = True
@@ -2584,6 +2696,8 @@ class Uygulama(tk.Tk):
                 "pazaryeri-radar bulunamadı",
                 f"pazaryeri-radar klasörü yok:\n{kok}")
             return
+        if not self._hak_tuket("Ürün Arama"):
+            return
 
         json_yol = kok / "data" / "out" / "paz_arama_gui.json"
         if json_yol.exists():
@@ -2851,6 +2965,8 @@ class Uygulama(tk.Tk):
         if not sorgu:
             messagebox.showwarning("Sorgu yok",
                                    "Firma/marka adı yazın.")
+            return
+        if not self._hak_tuket("İthalat Radarı"):
             return
         if self.ithalat_veri:
             self.ithalat_gecmis.append((self.ithalat_mod, self.ithalat_veri))
