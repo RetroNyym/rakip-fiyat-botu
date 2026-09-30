@@ -33,8 +33,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt Pillow matplotlib pytest
 
+      # Linux runner'da ekran yok: GUI testleri xvfb (sanal X) altında çalışmalı.
+      - name: xvfb kur (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
       - name: Birim + entegrasyon testleri (unittest)
+        if: runner.os == 'Windows'
         run: python -m unittest discover -v
 
+      - name: Birim + entegrasyon testleri (unittest, xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m unittest discover -v
+
       - name: Çapraz doğrulama (pytest)
+        if: runner.os == 'Windows'
         run: python -m pytest -q
+
+      - name: Çapraz doğrulama (pytest, xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -m pytest -q
