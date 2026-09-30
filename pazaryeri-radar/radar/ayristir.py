@@ -156,6 +156,15 @@ URL_SABLON = {
     "trendyol": "https://www.trendyol.com/sr?q={sorgu}&pi={sayfa}",
     "n11": "https://www.n11.com/ara?q={sorgu}&paging={sayfa}",
     "hepsiburada": "https://www.hepsiburada.com/ara?q={sorgu}&sayfa={sayfa}",
+    "amazon": "https://www.amazon.com.tr/s?k={sorgu}&page={sayfa}",
+}
+
+# Göreli linkleri mutlak yapan taban adresler
+SITE_BAZ = {
+    "trendyol": "https://www.trendyol.com",
+    "n11": "https://www.n11.com",
+    "hepsiburada": "https://www.hepsiburada.com",
+    "amazon": "https://www.amazon.com.tr",
 }
 
 KART_SECICILERI = {
@@ -189,14 +198,22 @@ KART_SECICILERI = {
         'div.productListContentItem',
         'div[class*="productList"]',
     ],
+    "amazon": [
+        'div[data-component-type="s-search-result"]',
+        'div[data-asin][data-component-type]',
+        'div.s-result-item[data-asin]',
+        'div.s-result-item',
+    ],
 }
 
 AD_SECICILERI = [
     '[data-testid="product-name"]', '[data-test-id="product-name"]',
     '[data-testid="title"]', '.product-name', '.productName',
     '.prd-name', '.name', 'h3', 'h2 .title', '.title',
+    'h2 span', 'h2',
 ]
 FIYAT_SECICILERI = [
+    '.a-price .a-offscreen',   # Amazon: tek temiz "₺…" değeri
     '[data-testid="price-current"]', '[data-test-id="price"]',
     '[data-test-id="currentPrice"]', '.price-current', '.price',
     '.prc-dsc', '.discountPrice', '.sale-price', '.money',
@@ -284,12 +301,16 @@ def kart_coz(card, platform: str) -> Listeleme | None:
     url = ""
     a = card.find("a", href=True)
     if a:
-        href = a["href"]
-        url = href if href.startswith("http") else None
-    if not url:
-        url = _link_bul(card, r"-p-\d+") or ""
-    if url and url.startswith("//"):
+        url = a["href"]
+    if not url or not re.search(r"-p-\d+|/dp/|/p/|/urun/", url):
+        aday = _link_bul(card, r"-p-\d+") or _link_bul(card, r"/dp/") \
+            or _link_bul(card, r"/p/")
+        if aday:
+            url = aday
+    if url.startswith("//"):
         url = "https:" + url
+    elif url.startswith("/"):
+        url = SITE_BAZ.get(platform, "") + url
 
     if fiyat is None and not satici:
         return None

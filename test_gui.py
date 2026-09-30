@@ -11,8 +11,12 @@ Ekran (tkinter) yoksa sessizce atlanır — bu yüzden Linux CI'da koşmayabilir
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
+
+# Açılış ipucu balonu testlerde açılmasın
+os.environ["RIYA_TESTI"] = "1"
 
 import rakip_takip as cekirdek
 

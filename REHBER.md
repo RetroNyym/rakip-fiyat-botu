@@ -47,8 +47,8 @@ Soldan sağa:
 - **Kaydet** → ürün listeye düşer ve `config.json`'a yazılır. **Vazgeç** → hiçbir şey olmaz.
 - Aynı adda ürün zaten varsa *"Bu adda bir ürün zaten var"* uyarısı verilir (eklenmez).
 - **İpucu:** Adres çubuğundaki linki kopyalayıp yapıştırmanız yeterli; alanı sol
-  paneldeki `HEDEF PAZARYERİ / URL` kutusuna yapıştırıp **＋**'a basmak da aynı işi yapar
-  (pencere URL dolu açılır).
+  paneldeki `ÜRÜN ARA` kutusuna yapıştırıp **＋**'a basmak da aynı işi yapar
+  (pencere ad + link dolu açılır).
 
 ## 2) 📊 Rapor
 ![Rapor](docs/rehber/03-rapor.png)
@@ -130,11 +130,11 @@ Pencere çok daralırsa otomatik gizlenirler.
 ## 8) Form alanları (4 adet)
 ![Alanlar](docs/rehber/10-alanlar.png)
 
-### a) HEDEF PAZARYERİ / URL  +  ＋ düğmesi
-- **Kutuya ne yazılır:** İzinlenecek ürünün linki.
-- **＋ 'a basınca:** Pencere **URL dolu** şekilde açılır → ürün adını yazıp **Kaydet**.
+### a) 🔍 ÜRÜN ARA (4 SİTE) — kutu · 🔍 · ＋
+- **Kutuya yazın:** Ürün adı (örn. *iphone 15*) → **Enter** ya da **🔍**: Trendyol, Hepsiburada, N11 ve Amazon'da aranır, sonuçlar **🔍 Ürün Arama** sekmesine fiyat artan sırayla düşer.
+- **Link yapıştırırsanız** (http/https) **＋** o linki takip listesine ekler (pencere ad + link dolu açılır).
 - Kutuya tıkladığınızda ipucu yazısı silinir, odak çıkınca geri gelir.
-- Boş URL ile **＋**'a basarsanız boş pencere açılır.
+- **İpucu balonu:** programın ilk açılışında kısa kılavuz çıkar ("Bir daha gösterme" ile kapatılabilir); ayrıca **her butonun üstüne bir süre gelince** o butonun açıklaması görünür.
 
 ### b) TAKİP PERİYODU
 Otomatik tekrar taramanın sıklığı. Seçenekler ve anlamları:
@@ -280,7 +280,27 @@ Uyarı eşiği (Ayarlar penceresindeki "Uyarı eşiği" ile aynı):
 **Satır renkleri:** kırmızı zemin = değişen ürün · sarı yazı = sorunlu ürün ·
 camgöbeği yazı = ilk kayıt.
 
-## 15) 🟢 Fiyat Geçmişi
+## 15) 🔍 Ürün Arama (4 pazaryeri)
+
+Ürün adını yazdığınızda **Trendyol, Hepsiburada, N11 ve Amazon**'da aranır;
+sonuçlar **fiyat artan sırayla** bu sekmeye düşer.
+
+![Ürün Arama](docs/rehber/23-urun-arama.png)
+
+- Arama kutusu **sol panelde** (Enter ya da 🔍).
+- Özet satırında site başına sonuç sayısı görünür; erişilemeyen site ✗ ile işaretlenir.
+
+| Buton | Ne yapar |
+|---|---|
+| **🌐 Tarayıcıda Aç** | Seçili ürünün sayfasını tarayıcıda açar |
+| **＋ Takibe Al** | Seçili ürünü takip listesine ekler (ad + link hazır gelir) |
+| **📋 Linki Kopyala** | Ürün linkini panoya kopyalar |
+| **🗑 Temizle** | Sonuçları siler |
+| **📄 CSV Aktar** | Sonuç tablosunu CSV yapar |
+
+**Çift tık:** satıra çift tıklayınca o ürün tarayıcıda açılır.
+
+## 16) 🟢 Fiyat Geçmişi
 
 - **Önce soldaki listeden bir ürün seçin** → o ürünün gün gün fiyatları tabloya düşer,
   sağdaki alanada **grafik** çizilir.
@@ -293,7 +313,7 @@ camgöbeği yazı = ilk kayıt.
 
 - **Not:** En az **2 fiyat kaydı** olmalı (ilk taramadan sonra grafiğe düşer).
 
-## 16) 🟠 Rapor
+## 17) 🟠 Rapor
 
 - **Üst satır:** `Son [30] gün` — kutuya gün yazın (7–365).
 
@@ -312,7 +332,7 @@ camgöbeği yazı = ilk kayıt.
 
 **Renkler:** kırmızı yazı = fiyat artmış · yeşil yazı = fiyat düşmüş.
 
-## 17) 🏆 Rakip Radar
+## 18) 🏆 Rakip Radar
 
 Rakip satıcıların **kim, kaça, kaç yorumla** sattığını gösterir (tahmini veriler).
 
@@ -329,7 +349,7 @@ Rakip satıcıların **kim, kaça, kaç yorumla** sattığını gösterir (tahmi
 Tabloda öne çıkan satır **lider satıcıdır** (koyu zemin + camgöbeği yazı).
 Alt satırda konsol gibi özet yazısı çıkar. `F7` kısayolu da bu sekmeyi başlatır.
 
-## 18) 🌍 İthalat Radarı
+## 19) 🌍 İthalat Radarı
 
 Rakibinin **nereden mal aldığını** keşfeder — ABD denizyolu ithalat kayıtları
 (ImportYeti verisi) üzerinden tedarikçi ve müşteri listesi çıkarır.
@@ -349,7 +369,7 @@ Rakibinin **nereden mal aldığını** keşfeder — ABD denizyolu ithalat kayı
 **Sütunlar (detay):** Bağlantı · Ülke · Sefer · Ürün Grupları.
 Özet satırında toplam sonuç, API hakkı ve en yoğun ülkeler görünür.
 
-## 19) 🖼 Ürün Görseli
+## 20) 🖼 Ürün Görseli
 
 Seçili ürünün **sayfa görselini + fiyatını birlikte** gösterir (sahte tıklama/hile kontrolü için).
 
@@ -366,7 +386,7 @@ Seçili ürünün **sayfa görselini + fiyatını birlikte** gösterir (sahte t�
 
 # 🟨 ALT ŞERİT
 
-## 20) 📟 KONSOL
+## 21) 📟 KONSOL
 ![Konsol](docs/rehber/18-konsol.png)
 
 Her şeyin canlı kaydı. Renk kodları:
@@ -385,16 +405,16 @@ Her şeyin canlı kaydı. Renk kodları:
 | **Kopyala** | Tüm yazılanları panoya kopyalar |
 | **Kaydet** | Konsolu `.txt` dosyasına yazar (destek isteyince gönderin) |
 
-## 21) İlerleme çubuğu
+## 22) İlerleme çubuğu
 ![İlerleme](docs/rehber/19-ilerleme.png)
 Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede boştur.
 
-## 22) Onay şeridi (dekoratif)
+## 23) Onay şeridi (dekoratif)
 ![Onay şeridi](docs/rehber/20-onay-seridi.png)
 `✓ 7/24 Otomatik Rakip Fiyat Takibi` · `✓ Fiyat Değişimlerinde Anlık Alarm` ·
 `✓ Kâr Marjını Daima Zirvede Tutun` · `✓ Sınırsız Ürün Takibi` — özellik listesi, **tıklanmaz**.
 
-## 23) Durum çubuğu
+## 24) Durum çubuğu
 ![Durum çubuğu](docs/rehber/21-durum-cubugu.png)
 
 | Kısım | Ne gösterir |
@@ -458,6 +478,7 @@ Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede bo�
 | Tarama çok yavaş | `⚙ Ayarlar → İstekler arası bekleme`'yi düşürün (riskli) |
 | Radar: "Radar tamamlanamadı (kod 2)" | Konsola bakın: "bağlantı hatası/TLS" yazıyorsa **ağ güvenliği duvarı** pazaryerlerini engelliyordur (tarayıcıda da açılmıyorsa VPN/ağ yöneticisi gerekir); "ürün kartı bulunamadı" yazıyorsa sayfa yapısı değişmiştir |
 | İthalat Radarı: "Tamamlanamadı (kod 2)" | Konsola bakın: "bağlantı/TLS" hatasıysa **importyeti.com engelliyordur** (VPN deneyin); "JSON değil" yazıyorsa site tasarımı değişmiş olabilir. Sonuç tablosu boşsa o isimle kayıt yoktur — İngilizce isim deneyin (*nike*, *IKEA*) |
+| Ürün Araması'nda site ✗ | O siteye erişilemedi — ağ güvenliği duvarı/VPN engeli olabilir; diğer sitelerle çalışır |
 | CSV Excel'de bozuk açılıyor | Sorun yok — dosyalar UTF-8 (BOM) ile yazılır; yine de bozuksa Excel'de "Veri → Metinden" ile açın |
 
 ---

@@ -45,6 +45,9 @@ def argumanlari_ayristir(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--json", dest="json_yol",
                    default=str(KOK / "data" / "out" / "radar_gui.json"),
                    help="sonucun yazılacağı JSON dosyası")
+    p.add_argument("--mod", choices=["satici", "urun"], default="satici",
+                   help="satici: satıcı liderlik tablosu (varsayılan); "
+                        "urun: sitesel ürün arama sonuçları")
     p.add_argument("--sayfa-bekleme", type=float, default=2.0,
                    help="sayfalar arası bekleme (sn, varsayılan: 2)")
     p.add_argument("--zaman-asimi", type=float, default=25.0,
@@ -104,6 +107,55 @@ def sayfalari_topla(args: argparse.Namespace,
     return toplam, ilk_hata if not toplam else None
 
 
+def urun_modu(args: argparse.Namespace, platformlar: list[str],
+              sayfa_sayisi: int) -> int:
+    """--mod urun: her siteden ürün listesi çıkar (fiyat + link ile)."""
+    siteler: list[dict] = []
+    toplam = 0
+    for platform in platformlar:
+        liste, hata = sayfalari_topla(args, platform)
+        urunler = [{
+            "ad": L.ad,
+            "fiyat": L.fiyat,
+            "para": "TL",
+            "url": L.url,
+            "satici": L.satici or "",
+            "yorum": L.yorum,
+            "puan": L.puan,
+        } for L in liste]
+        siteler.append({"site": platform, "hata": hata,
+                        "urunler": urunler})
+        toplam += len(urunler)
+        if platform != platformlar[-1] and not args.html_dizin \
+                and args.sayfa_bekleme > 0:
+            time.sleep(args.sayfa_bekleme)
+
+    sonuc = {
+        "mod": "urun",
+        "sorgu": args.sorgu,
+        "siteler": siteler,
+        "toplam": toplam,
+        "sayfa_sayisi": sayfa_sayisi,
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "engine_version": __version__,
+    }
+    json_yol = Path(args.json_yol).resolve()
+    json_yol.parent.mkdir(parents=True, exist_ok=True)
+    json_yol.write_text(json.dumps(sonuc, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+
+    yaz("")
+    for s in siteler:
+        durum = (f"{len(s['urunler'])} ürün"
+                 if not s["hata"] else f"✗ {s['hata']}")
+        yaz(f"  · {s['site']}: {durum}")
+    yaz(f"✅ Toplam {toplam} sonuç · 📦 JSON: {json_yol}")
+    if not toplam:
+        yaz("✗ Hiç site sonuç vermedi (yukarıdaki nedenlere bakın).")
+        return 2
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argumanlari_ayristir(argv)
     platformlar = [p.strip().lower() for p in
@@ -111,9 +163,13 @@ def main(argv: list[str] | None = None) -> int:
     sayfa_sayisi = max(1, min(args.sayfa, 20))
 
     yaz("=" * 60)
-    yaz(f"🏆 radar {__version__} · sorgu: '{args.sorgu}' · "
+    yaz(f"🏆 radar {__version__} · mod: {args.mod} · "
+        f"sorgu: '{args.sorgu}' · "
         f"platformlar: {', '.join(platformlar)} · {sayfa_sayisi} sayfa")
     yaz("=" * 60)
+
+    if args.mod == "urun":
+        return urun_modu(args, platformlar, sayfa_sayisi)
 
     tum_listelemler: list[Listeleme] = []
     engellenen: dict[str, str] = {}

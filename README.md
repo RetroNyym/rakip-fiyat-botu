@@ -17,6 +17,7 @@
 | | |
 |---|---|
 | 🔍 **Tarama** | `config.json`'daki rakip ürün sayfalarını gezer, fiyatı çeker |
+| 🔍 **Ürün Arama** | Ürün adını Trendyol · Hepsiburada · N11 · Amazon'da toplu arar, fiyatları karşılaştırır |
 | 📈 **Geçmiş** | Her günün fiyatını SQLite'a yazar → geçmiş + grafik oluşur |
 | 🔔 **Uyarı** | Fiyat değişince Telegram'a mesaj atar |
 | 🧭 **Rakip Radar** | Pazaryerlerinde satıcı listesi: pazar payı, yorum, tahmini ciro + lider tablosu |
@@ -44,6 +45,10 @@
 | Arayüz | Fiyat geçmişi + grafik |
 |---|---|
 | ![GUI](docs/gui.png) | ![Geçmiş](docs/gecmis.png) |
+
+**🔍 Ürün Arama** — 4 pazaryerinde fiyat karşılaştırması:
+
+![Ürün Arama](docs/urun-arama.png)
 
 **🌍 İthalat Radarı** — tedarikçi/müşteri keşfi (ABD ithalat kayıtları):
 
@@ -150,7 +155,8 @@ rakip-fiyat-botu/
 ├── requirements.gelistirme.txt  # Test/CI bağımlılıkları
 ├── test_rakip_takip.py   # Çekirdek testleri (58 durum)
 ├── test_gui.py           # Arayüz duman + regresyon testleri (39 durum)
-├── test_ithalat_radar.py # İthalat Radarı ayrıştırma testleri (offline)
+├── test_urun_arama.py    # Ürün Arama modülü + sekmesi testleri (21 durum)
+├── test_ithalat_radar.py # İthalat Radarı ayrıştırma testleri (18 durum)
 ├── baslat.bat        # Arayüzü başlat (çift tık)
 ├── tarama.bat        # Zamanlanmış CLI taraması
 ├── pazaryeri-radar/  # 🏆 Rakip Radar modülü (satıcı toplama + rapor)
@@ -191,6 +197,7 @@ Ne kapsanıyor:
 | Tarama (uçtan uca) | ilk kayıt / değişti / değişmedi / fiyat yok / robots.txt |
 | Telegram | token yokken **ağ çağrısı yapmadan** `False` |
 | Arayüz | liste + canlı arama, seçim, geçmiş, grafik, rapor, CSV, konsol |
+| Ürün Arama | 4 site HTML örnekleriyle ayrıştırma + GUI sekmesi (ağsız) |
 | İthalat Radarı | HTML/JSON ayrıştırma örnek dosyalarla **ağsız** test edilir |
 | CLI | `--help`, hata kodları, eksik config mesajı |
 
