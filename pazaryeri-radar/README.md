@@ -12,7 +12,7 @@ python -m radar "iphone 15 kılıf" -m trendyol,n11,hepsiburada -p 2 \
 | Parametre | Anlamı |
 |---|---|
 | `sorgu` (posisyonel) | Aranacak kelime grubu |
-| `-m` | Virgülle ayrılmış platformlar: `trendyol`, `n11`, `hepsiburada` |
+| `-m` | Virgülle ayrılmış platformlar: `trendyol`, `n11`, `hepsiburada`, `amazon`, `pazarama`, `etsy`, `ebay`, `aliexpress`, `ciceksepeti` |
 | `-p` | Platform başına sayfa sayısı (1–20) |
 | `--json` | Sonucun yazılacağı JSON dosyası (varsayılan: `data/out/radar_gui.json`) |
 | `--mod` | `satici` (varsayılan): satıcı liderlik tablosu · `urun`: her siteden ürün listesi (fiyat + link) — GUI'nin "Ürün Arama" sekmesi bunu kullanır |
@@ -25,12 +25,17 @@ raporu. En az bir listeleme bulunamazsa **çıkış kodu 2** döner (GUI konsola
 `--mod urun` çıktısı (toplu ürün araması):
 
 ```bash
-python -m radar "iphone 15" --mod urun -m trendyol,n11,hepsiburada,amazon \
+python -m radar "iphone 15" --mod urun \
+    -m trendyol,n11,hepsiburada,amazon,pazarama,etsy,ebay,aliexpress,ciceksepeti \
     -p 1 --json data/out/paz_arama_gui.json
 ```
 
 → `{sorgu, siteler: [{site, hata, urunler: [{ad, fiyat, para, url, satici, yorum, puan}]}], toplam}`
-— platform başına 1 sayfa okur, `ornek-html/` (4 site örneği) ile çevrimdışı da çalışır.
+— platform başına 1 sayfa okur, `ornek-html/` (9 site örneği) ile çevrimdışı da çalışır.
+
+> **Erişim notu:** eBay/AliExpress/Çiçeksepeti şu an ağ güvenliği duvarınca
+> engelleniyor (TLS kesiliyor) — VPN ile açılır; Etsy captcha gösterebilir.
+> Parser'lar fixture'larla hazır ve testlidir; engel kalktığında çalışır.
 
 ## Tahmini rakamlar nasıl hesaplanır?
 

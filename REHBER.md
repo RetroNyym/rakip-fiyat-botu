@@ -130,8 +130,8 @@ Pencere çok daralırsa otomatik gizlenirler.
 ## 8) Form alanları (4 adet)
 ![Alanlar](docs/rehber/10-alanlar.png)
 
-### a) 🔍 ÜRÜN ARA (4 SİTE) — kutu · 🔍 · ＋
-- **Kutuya yazın:** Ürün adı (örn. *iphone 15*) → **Enter** ya da **🔍**: Trendyol, Hepsiburada, N11 ve Amazon'da aranır, sonuçlar **🔍 Ürün Arama** sekmesine fiyat artan sırayla düşer.
+### a) 🔍 ÜRÜN ARA (9 SİTE) — kutu · 🔍 · ＋
+- **Kutuya yazın:** Ürün adı (örn. *iphone 15*) → **Enter** ya da **🔍**: Trendyol, Hepsiburada, N11, Amazon, Pazarama, Etsy, eBay, AliExpress ve Çiçeksepeti'de aranır; sonuçlar **🔍 Ürün Arama** sekmesine fiyat artan sırayla düşer.
 - **Link yapıştırırsanız** (http/https) **＋** o linki takip listesine ekler (pencere ad + link dolu açılır).
 - Kutuya tıkladığınızda ipucu yazısı silinir, odak çıkınca geri gelir.
 - **İpucu balonu:** programın ilk açılışında kısa kılavuz çıkar ("Bir daha gösterme" ile kapatılabilir); ayrıca **her butonun üstüne bir süre gelince** o butonun açıklaması görünür.
@@ -280,15 +280,25 @@ Uyarı eşiği (Ayarlar penceresindeki "Uyarı eşiği" ile aynı):
 **Satır renkleri:** kırmızı zemin = değişen ürün · sarı yazı = sorunlu ürün ·
 camgöbeği yazı = ilk kayıt.
 
-## 15) 🔍 Ürün Arama (4 pazaryeri)
+## 15) 🔍 Ürün Arama (9 pazaryeri)
 
-Ürün adını yazdığınızda **Trendyol, Hepsiburada, N11 ve Amazon**'da aranır;
+Ürün adını yazdığınızda **Trendyol, Hepsiburada, N11, Amazon, Pazarama,
+Etsy, eBay, AliExpress ve Çiçeksepeti**'nde aranır;
 sonuçlar **fiyat artan sırayla** bu sekmeye düşer.
 
 ![Ürün Arama](docs/rehber/23-urun-arama.png)
 
+**Site durumları** (özet satırında ✗ görünen siteler):
+
+| Site | Durum |
+|---|---|
+| Trendyol · N11 · Hepsiburada · Amazon · Pazarama | ✅ Çalışıyor |
+| eBay · AliExpress · Çiçeksepeti | 🚧 Ağ güvenliği duvarı engelliyor — **VPN ile açılır** (açıkken ✗ yerine sonuç gelir) |
+| Etsy | 🚧 Bot doğrulaması (captcha) gösterebilir — VPN/farklı IP ile deneyin |
+
 - Arama kutusu **sol panelde** (Enter ya da 🔍).
 - Özet satırında site başına sonuç sayısı görünür; erişilemeyen site ✗ ile işaretlenir.
+- Farklı para birimli ürünler (eBay/AliExpress: USD) ayrı grupta, para birimiyle gösterilir.
 
 | Buton | Ne yapar |
 |---|---|
@@ -478,7 +488,7 @@ Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede bo�
 | Tarama çok yavaş | `⚙ Ayarlar → İstekler arası bekleme`'yi düşürün (riskli) |
 | Radar: "Radar tamamlanamadı (kod 2)" | Konsola bakın: "bağlantı hatası/TLS" yazıyorsa **ağ güvenliği duvarı** pazaryerlerini engelliyordur (tarayıcıda da açılmıyorsa VPN/ağ yöneticisi gerekir); "ürün kartı bulunamadı" yazıyorsa sayfa yapısı değişmiştir |
 | İthalat Radarı: "Tamamlanamadı (kod 2)" | Konsola bakın: "bağlantı/TLS" hatasıysa **importyeti.com engelliyordur** (VPN deneyin); "JSON değil" yazıyorsa site tasarımı değişmiş olabilir. Sonuç tablosu boşsa o isimle kayıt yoktur — İngilizce isim deneyin (*nike*, *IKEA*) |
-| Ürün Araması'nda site ✗ | O siteye erişilemedi — ağ güvenliği duvarı/VPN engeli olabilir; diğer sitelerle çalışır |
+| Ürün Araması'nda site ✗ | eBay/AliExpress/Çiçeksepeti → güvenlik duvarı engeli, **VPN ile açılır**; Etsy → captcha, tekrar deneyin/VPN; diğer siteler etkilenmez |
 | CSV Excel'de bozuk açılıyor | Sorun yok — dosyalar UTF-8 (BOM) ile yazılır; yine de bozuksa Excel'de "Veri → Metinden" ile açın |
 
 ---

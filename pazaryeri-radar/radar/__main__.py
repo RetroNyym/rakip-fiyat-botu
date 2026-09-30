@@ -117,7 +117,7 @@ def urun_modu(args: argparse.Namespace, platformlar: list[str],
         urunler = [{
             "ad": L.ad,
             "fiyat": L.fiyat,
-            "para": "TL",
+            "para": L.extra.get("para", "TL"),
             "url": L.url,
             "satici": L.satici or "",
             "yorum": L.yorum,

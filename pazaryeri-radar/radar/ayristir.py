@@ -63,23 +63,62 @@ def sayiyi_coz(metin: str | None) -> float | None:
 
 
 def para_coz(metin: str | None) -> float | None:
-    """Fiyat metninden TL tutarını çözer: '1.299,90 TL' → 1299.90"""
+    """Fiyat metninden tutarı çözer.
+
+    TR: '1.299,90 TL' → 1299.90 · EN: 'US $12.34' → 12.34,
+    '1,234.56' → 1234.56 · tam sayı: '1.299' (binlik) → 1299.0
+    """
     if not metin:
         return None
-    temiz = str(metin).replace("TL", "").replace("₺", "").strip()
-    eslesme = re.search(r"(\d{1,3}(?:\.\d{3})+,\d{1,2}|\d+,\d{1,2}"
-                        r"|\d{1,3}(?:\.\d{3})+|\d+)", temiz)
-    if not eslesme:
-        return None
-    sayi = eslesme.group()
-    if "," in sayi:
-        sayi = sayi.replace(".", "").replace(",", ".")
-    else:
-        sayi = sayi.replace(".", "")
-    try:
-        return float(sayi)
-    except ValueError:
-        return None
+    ham = str(metin)
+    turkce = "TL" in ham.upper() or "₺" in ham
+    temiz = ham.replace("TL", "").replace("₺", "").strip()
+
+    virgul_ondalik = re.search(r"\d,\d{1,2}(?!\d)", temiz)
+    if turkce or virgul_ondalik:
+        eslesme = re.search(r"\d{1,3}(?:\.\d{3})+,\d{1,2}|\d+,\d{1,2}",
+                            temiz)
+        if eslesme:
+            sayi = eslesme.group().replace(".", "").replace(",", ".")
+            try:
+                return float(sayi)
+            except ValueError:
+                return None
+
+    # Nokta ondalik (USD/EUR): '12.34', '1,234.56' — sonraki hane 3 ise
+    # bu binlik ayractir ('1.299' → buraya girmez).
+    eslesme = re.search(r"\d{1,3}(?:,\d{3})*\.\d{2}(?!\d)", temiz)
+    if eslesme:
+        try:
+            return float(eslesme.group().replace(",", ""))
+        except ValueError:
+            return None
+
+    # Binlik ayrac ya da tam sayi: '1.299', '1,299', '450'
+    eslesme = re.search(r"\d{1,3}(?:[.,]\d{3})+|\d+", temiz)
+    if eslesme:
+        try:
+            return float(eslesme.group().replace(".", "")
+                         .replace(",", ""))
+        except ValueError:
+            return None
+    return None
+
+
+def para_bul(metin: str | None) -> str:
+    """Fiyat metninden para birimini: TL / USD / EUR / GBP (varsayılan TL)."""
+    if not metin:
+        return "TL"
+    m = str(metin)
+    if "₺" in m or re.search(r"\bTL\b", m, re.IGNORECASE):
+        return "TL"
+    if "€" in m or re.search(r"\bEUR\b", m, re.IGNORECASE):
+        return "EUR"
+    if "£" in m or re.search(r"\bGBP\b", m, re.IGNORECASE):
+        return "GBP"
+    if "$" in m or re.search(r"\b(?:USD|US)\b", m):
+        return "USD"
+    return "TL"
 
 
 def metinden_fiyat(metin: str) -> float | None:
@@ -106,7 +145,20 @@ _SATICI_KALIPLARI = [
 ]
 _SATIS_KALIP = re.compile(
     r"(\d[\d.,]*\s*(?:bin|mn)?\s*\+?\s*satan)", re.IGNORECASE)
-_YORUM_KALIP = re.compile(r"\((\d[\d.]*)\)")
+_YORUM_KALIP = re.compile(r"\((\d[\d.,]*)\)")
+# Ürün linki desenleri: TR (-p-, /urun/), Amazon (/dp/), eBay (/itm/),
+# Etsy (/listing/), AliExpress (/item/)
+_URUN_KALIP = r"-p-\d+|/dp/|/p/|/urun/|/itm/|/listing/|/item/"
+
+
+def _yorum_coz(deger: str | None) -> int:
+    """Yorum sayısını çözer: '(1.234)' → 1234, '(1,234)' → 1234."""
+    if not deger:
+        return 0
+    d = str(deger).strip()
+    if re.fullmatch(r"\d{1,3}(?:,\d{3})+", d):
+        return int(d.replace(",", ""))
+    return int(sayiyi_coz(d) or 0)
 
 
 def _kart_metninden_satici(metin: str) -> str | None:
@@ -129,6 +181,8 @@ def _satici_temiz(deger: str | None) -> str | None:
         if eslesme and eslesme.group(1).strip():
             metin = metni_temizle(eslesme.group(1))
             break
+    # "techstore99 (1,234)" gibi yorum sayaçlarını at
+    metin = re.split(r"\s+\(", metin, maxsplit=1)[0].strip()
     return metin if 1 < len(metin) < 80 else None
 
 
@@ -157,6 +211,13 @@ URL_SABLON = {
     "n11": "https://www.n11.com/ara?q={sorgu}&paging={sayfa}",
     "hepsiburada": "https://www.hepsiburada.com/ara?q={sorgu}&sayfa={sayfa}",
     "amazon": "https://www.amazon.com.tr/s?k={sorgu}&page={sayfa}",
+    "pazarama": "https://www.pazarama.com/arama?q={sorgu}&sayfa={sayfa}",
+    "etsy": "https://www.etsy.com/search?q={sorgu}&page={sayfa}",
+    "ebay": "https://www.ebay.com/sch/i.html?_nkw={sorgu}&_pgn={sayfa}",
+    "aliexpress": ("https://www.aliexpress.com/wholesale"
+                   "?SearchText={sorgu}&page={sayfa}"),
+    "ciceksepeti": ("https://www.ciceksepeti.com/arama"
+                    "?query={sorgu}&page={sayfa}"),
 }
 
 # Göreli linkleri mutlak yapan taban adresler
@@ -165,6 +226,11 @@ SITE_BAZ = {
     "n11": "https://www.n11.com",
     "hepsiburada": "https://www.hepsiburada.com",
     "amazon": "https://www.amazon.com.tr",
+    "pazarama": "https://www.pazarama.com",
+    "etsy": "https://www.etsy.com",
+    "ebay": "https://www.ebay.com",
+    "aliexpress": "https://www.aliexpress.com",
+    "ciceksepeti": "https://www.ciceksepeti.com",
 }
 
 KART_SECICILERI = {
@@ -204,6 +270,39 @@ KART_SECICILERI = {
         'div.s-result-item[data-asin]',
         'div.s-result-item',
     ],
+    "pazarama": [
+        '[data-testid="listing-product-card-grid"]',
+        '.product-card',
+        'div[class*="product-card"]',
+        'div[class*="ProductCard"]',
+    ],
+    "etsy": [
+        'li[data-listing-id]',
+        'div[data-listing-id]',
+        '.v2-listing-card',
+        '.js-merch-stash-check-listing',
+        'div[data-search-results] li',
+        'li.wt-list-unstyled',
+    ],
+    "ebay": [
+        'li.s-item',
+        'li[class*="s-item"]',
+    ],
+    "aliexpress": [
+        '.search-item-card-wrapper-gallery',
+        'div[class*="search-item-card"]',
+        'div[id="card-list"] > div',
+        'div[class*="list--item"]',
+        'div[class*="gallery"]',
+    ],
+    "ciceksepeti": [
+        '[data-testid="product-card"]',
+        '[data-test-id*="product"]',
+        'div[class*="product-card"]',
+        'div[class*="ProductCard"]',
+        'div[class*="search-result"]',
+        'li[class*="product-item"]',
+    ],
 }
 
 AD_SECICILERI = [
@@ -211,9 +310,18 @@ AD_SECICILERI = [
     '[data-testid="title"]', '.product-name', '.productName',
     '.prd-name', '.name', 'h3', 'h2 .title', '.title',
     'h2 span', 'h2',
+    '.s-item__title',              # eBay
+    '.v2-listing-card__title',     # Etsy
+    '[class*="title--item"]',      # AliExpress
 ]
 FIYAT_SECICILERI = [
     '.a-price .a-offscreen',   # Amazon: tek temiz "₺…" değeri
+    '.product-card__price',    # Pazarama
+    '.s-item__price',          # eBay
+    '.n-listing-card__price',  # Etsy
+    '.currency-price',         # Etsy: sembol + değer birlikte
+    '[class*="price-sale"]',   # AliExpress
+    '[class*="price--current"]',
     '[data-testid="price-current"]', '[data-test-id="price"]',
     '[data-test-id="currentPrice"]', '.price-current', '.price',
     '.prc-dsc', '.discountPrice', '.sale-price', '.money',
@@ -230,6 +338,10 @@ SATICI_SECICILERI = [
     '.merchant-name', '.merchantName', '.seller-name', '.sellerName',
     '.merchant-title', '.merchantTitle', '.store-name', '.storeName',
     '[class*="merchant"]', '[class*="seller"]', '[class*="satici"]',
+    '.v2-listing-card__shop',     # Etsy
+    '.s-item__seller-info-text',  # eBay
+    '[data-shop-name]',           # Etsy
+    '[class*="store-name"]',      # AliExpress
 ]
 
 
@@ -257,9 +369,13 @@ def kart_coz(card, platform: str) -> Listeleme | None:
     if not ad:
         return None
 
-    fiyat = para_coz(_ilk_deger(card, FIYAT_SECICILERI))
+    fiyat_metni = _ilk_deger(card, FIYAT_SECICILERI)
+    fiyat = para_coz(fiyat_metni)
     if fiyat is None:
         fiyat = metinden_fiyat(metin)
+        if fiyat is not None and not fiyat_metni:
+            fiyat_metni = metin
+    para = para_bul(fiyat_metni)
 
     satici = (_satici_temiz(_ilk_deger(card, SATICI_SECICILERI))
               or _satici_temiz(_satici_attribute_tara(card))
@@ -272,11 +388,21 @@ def kart_coz(card, platform: str) -> Listeleme | None:
                 satici = metni_temizle(parca[-1].replace("-", " "))
 
     yorum_metni = _ilk_deger(card, YORUM_SECICILERI)
-    yorum = int(sayiyi_coz(yorum_metni) or 0)
+    yorum = _yorum_coz(yorum_metni)
     if not yorum:
         eslesme = _YORUM_KALIP.search(metin)
         if eslesme:
-            yorum = int(sayiyi_coz(eslesme.group(1)) or 0)
+            yorum = _yorum_coz(eslesme.group(1))
+    if not yorum:
+        # Etsy/Etsy benzeri: "(1.234)" yorum sayısı aria-label içinde olabilir
+        for dugum in card.find_all(True):
+            al = dugum.get("aria-label")
+            if isinstance(al, str):
+                eslesme = _YORUM_KALIP.search(al)
+                if eslesme:
+                    yorum = _yorum_coz(eslesme.group(1))
+                    if yorum:
+                        break
 
     rozet_metni = None
     eslesme = _SATIS_KALIP.search(metin)
@@ -302,22 +428,29 @@ def kart_coz(card, platform: str) -> Listeleme | None:
     a = card.find("a", href=True)
     if a:
         url = a["href"]
-    if not url or not re.search(r"-p-\d+|/dp/|/p/|/urun/", url):
-        aday = _link_bul(card, r"-p-\d+") or _link_bul(card, r"/dp/") \
-            or _link_bul(card, r"/p/")
+    if not url or not re.search(_URUN_KALIP, url):
+        aday = None
+        for kalip in (r"-p-\d+", r"/dp/", r"/itm/", r"/listing/",
+                      r"/item/", r"/p/"):
+            aday = _link_bul(card, kalip)
+            if aday:
+                break
         if aday:
             url = aday
     if url.startswith("//"):
         url = "https:" + url
     elif url.startswith("/"):
         url = SITE_BAZ.get(platform, "") + url
+    if "?" in url and re.search(r"/listing/|/itm/", url):
+        url = url.split("?", 1)[0]   # Etsy/eBay takip parametrelerini at
 
     if fiyat is None and not satici:
         return None
 
     return Listeleme(platform=platform, ad=metni_temizle(ad)[:200],
                      fiyat=fiyat, satici=satici, yorum=yorum, puan=puan,
-                     satis_rozet=satis_rozet, url=url)
+                     satis_rozet=satis_rozet, url=url,
+                     extra={"para": para})
 
 
 def sayfayi_ayristir(platform: str, ham_html: str) -> list[Listeleme]:

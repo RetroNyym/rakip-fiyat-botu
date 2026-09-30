@@ -35,7 +35,8 @@ def _engel_tespiti(kod: int, metin: str) -> str | None:
                 "(\"Erişim engellendi\"). Bu ağa/agan politikasına bakın.")
     if "captcha" in kucuk or "güvenlik doğrulamas" in kucuk \
             or "robot olduğunuzu" in kucuk or "verify you are human" in kucuk:
-        return "Site bot doğrulaması (captcha) gösteriyor — tekrar deneyin."
+        return ("Site bot doğrulaması (captcha) gösteriyor — tekrar "
+                "deneyin; devam ederse VPN/farklı IP deneyin.")
     if kod in (401, 403):
         return f"HTTP {kod} — erişim reddedildi (bot engeli olabilir)."
     if kod == 429:

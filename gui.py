@@ -150,7 +150,14 @@ URL_IPUCU = "Ürün adı yazın (örn. iphone 15) veya ürün linki yapıştır�
 
 # Arama sonuçlarında görünen site adları
 SITE_ETIKET = {"trendyol": "Trendyol", "hepsiburada": "Hepsiburada",
-               "n11": "N11", "amazon": "Amazon"}
+               "n11": "N11", "amazon": "Amazon", "pazarama": "Pazarama",
+               "etsy": "Etsy", "ebay": "eBay", "aliexpress": "AliExpress",
+               "ciceksepeti": "Çiçeksepeti"}
+
+# Ürün aramasının tarandığı tüm siteler (sıra = arama sırası)
+ARAMA_SITELERI = ["trendyol", "n11", "hepsiburada", "amazon",
+                  "pazarama", "etsy", "ebay", "aliexpress",
+                  "ciceksepeti"]
 PERIYOT_DEGERLER = ["Tek Seferlik Tarama", "5 Dakikada Bir",
                     "15 Dakikada Bir", "30 Dakikada Bir",
                     "60 Dakikada Bir"]
@@ -907,7 +914,7 @@ class Uygulama(tk.Tk):
         alanlar.pack(fill=X, padx=14, pady=(4, 0))
 
         # 1) ÜRÜN ARA — 4 pazaryerinde toplu arama (+ link ile hızlı ekleme)
-        self._alan_etiketi(alanlar, "ÜRÜN ARA (4 SİTE)")
+        self._alan_etiketi(alanlar, f"ÜRÜN ARA ({len(ARAMA_SITELERI)} SİTE)")
         satir = tk.Frame(alanlar, bg=RENKLER["panel"])
         satir.pack(fill=X, pady=(0, 2))
         self.url_on = tk.Entry(satir, font=("Segoe UI", 10),
@@ -2551,16 +2558,18 @@ class Uygulama(tk.Tk):
         self.paz_arama_baslat(deger)
 
     @staticmethod
-    def _tl(deger) -> str:
-        """39999.0 → '39.999,00 TL' (yoksa '-')."""
+    def _tl(deger, para: str = "TL") -> str:
+        """39999.0 → '39.999,00 TL'; USD/EUR gibi birimlerde sonek."""
         if deger is None:
             return "-"
         try:
             metin = f"{float(deger):,.2f}"
         except (TypeError, ValueError):
             return str(deger)
-        return metin.replace(",", "X").replace(".", ",").replace("X", ".") \
-            + " TL"
+        metin = metin.replace(",", "X").replace(".", ",").replace("X", ".")
+        if para and para != "TL":
+            return f"{metin} {para}"
+        return metin + " TL"
 
     def paz_arama_baslat(self, sorgu: str | None = None):
         if self.paz_suriyor:
@@ -2582,14 +2591,15 @@ class Uygulama(tk.Tk):
 
         py = radar_python_bul(kok)
         komut = [str(py), "-m", "radar", sorgu, "--mod", "urun",
-                 "-m", "trendyol,n11,hepsiburada,amazon", "-p", "1",
+                 "-m", ",".join(ARAMA_SITELERI), "-p", "1",
                  "--sayfa-bekleme", "1", "--json", str(json_yol)]
 
         self.paz_suriyor = True
         if hasattr(self, "paz_ara_btn"):
             self.paz_ara_btn.configure(state="disabled")
         self.ust_sayfa.select(self.arama_sayfa)
-        mesaj = f"🔍 '{sorgu}' 4 sitede aranıyor…"
+        mesaj = (f"🔍 '{sorgu}' {len(ARAMA_SITELERI)} sitede aranıyor… "
+                 "(erişilemeyen siteler ✗ ile işaretlenir)")
         self.paz_ozet.set(mesaj)
         self.konsol_yaz(mesaj)
         self.durum_deg.set(mesaj)
@@ -2660,13 +2670,17 @@ class Uygulama(tk.Tk):
             site = SITE_ETIKET.get(s.get("site", ""), s.get("site", ""))
             for u in s.get("urunler", []):
                 satirlar.append((site, u))
-        satirlar.sort(key=lambda t: (t[1].get("fiyat") is None,
-                                     t[1].get("fiyat") or 0.0))
+        satirlar.sort(
+            key=lambda t: (t[1].get("fiyat") is None,
+                           0 if (t[1].get("para") or "TL") == "TL" else 1,
+                           t[1].get("para") or "TL",
+                           t[1].get("fiyat") or 0.0))
 
         for site, u in satirlar:
             iid = self.paz_agac.insert(
                 "", END, values=(site, u.get("ad", ""),
-                                 self._tl(u.get("fiyat")),
+                                 self._tl(u.get("fiyat"),
+                                          u.get("para") or "TL"),
                                  u.get("satici", "") or "",
                                  u.get("yorum") or "",
                                  u.get("url", "") or ""))
@@ -3418,10 +3432,13 @@ class Uygulama(tk.Tk):
                 site = SITE_ETIKET.get(s.get("site", ""),
                                        s.get("site", ""))
                 for u in s.get("urunler", []):
+                    fiyat = u.get("fiyat")
+                    para = u.get("para") or "TL"
+                    if fiyat is not None and para != "TL":
+                        fiyat = f"{fiyat} {para}"
                     ara.append((u.get("fiyat"), [
                         site, u.get("ad", ""),
-                        u.get("fiyat") if u.get("fiyat")
-                        is not None else "",
+                        fiyat if fiyat is not None else "",
                         u.get("satici", "") or "",
                         u.get("yorum") or "",
                         u.get("url", "") or ""]))

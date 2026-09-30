@@ -46,7 +46,8 @@
 |---|---|
 | ![GUI](docs/gui.png) | ![Geçmiş](docs/gecmis.png) |
 
-**🔍 Ürün Arama** — 4 pazaryerinde fiyat karşılaştırması:
+**🔍 Ürün Arama** — 9 pazaryerinde fiyat karşılaştırması
+(Trendyol · Hepsiburada · N11 · Amazon · Pazarama · Etsy · eBay · AliExpress · Çiçeksepeti):
 
 ![Ürün Arama](docs/urun-arama.png)
 

@@ -35,7 +35,14 @@ BEKLENEN = {
     "n11": 4,
     "hepsiburada": 4,
     "amazon": 3,
+    "pazarama": 10,
+    "etsy": 4,
+    "ebay": 4,
+    "aliexpress": 4,
+    "ciceksepeti": 4,
 }
+TOPLAM_BEKLENEN = sum(BEKLENEN.values())          # 42
+ESKI_4_SITE = ["trendyol", "n11", "hepsiburada", "amazon"]
 
 
 class AyristirTesti(unittest.TestCase):
@@ -85,10 +92,48 @@ class AyristirTesti(unittest.TestCase):
         for L in self._oku("amazon"):
             self.assertIn("/dp/", L.url)
 
-    def test_url_sablonlari_4_site(self):
+    def test_url_sablonlari_9_site(self):
         for platform in BEKLENEN:
             self.assertIn(platform, ayristir.URL_SABLON)
             self.assertIn(platform, ayristir.SITE_BAZ)
+
+    def test_ebay_usd_fiyat_ve_link(self):
+        ilk = self._oku("ebay")[0]
+        self.assertEqual(ilk.fiyat, 12.34)
+        self.assertEqual(ilk.extra.get("para"), "USD")
+        self.assertIn("/itm/", ilk.url)
+        self.assertNotIn("?", ilk.url)          # takip parametresi atilmis
+        self.assertEqual(ilk.satici, "techstore99")
+
+    def test_etsy_link_temiz_ve_satici(self):
+        for L in self._oku("etsy"):
+            self.assertIn("/listing/", L.url)
+            self.assertNotIn("?", L.url)
+            self.assertTrue(L.satici)
+        ilk = self._oku("etsy")[0]
+        self.assertEqual(ilk.yorum, 1234)
+        self.assertEqual(ilk.fiyat, 249.9)
+        self.assertEqual(ilk.extra.get("para"), "TL")
+
+    def test_pazarama_canli_ayristirma(self):
+        sonuc = self._oku("pazarama")
+        self.assertEqual(len(sonuc), 10)
+        for L in sonuc:
+            self.assertTrue(L.url.startswith("https://www.pazarama.com/"))
+            self.assertIn("-p-", L.url)
+            self.assertEqual(L.extra.get("para"), "TL")
+
+    def test_ciceksepeti_mutlak_link(self):
+        for L in self._oku("ciceksepeti"):
+            self.assertTrue(
+                L.url.startswith("https://www.ciceksepeti.com/"))
+            self.assertNotIn("/d/", L.url)      # kategori degil urun
+
+    def test_aliexpress_usd(self):
+        for L in self._oku("aliexpress"):
+            self.assertIn("/item/", L.url)
+            self.assertEqual(L.extra.get("para"), "USD")
+            self.assertTrue(L.satici)
 
 
 class CliTesti(unittest.TestCase):
@@ -108,7 +153,7 @@ class CliTesti(unittest.TestCase):
 
 
 class CevrimdisiUctanUcaTesti(unittest.TestCase):
-    """main() --html-dizin ile 4 siteden toplu arama yapar (ağ yok)."""
+    """main() --html-dizin ile 9 siteden toplu arama yapar (ağ yok)."""
 
     @classmethod
     def setUpClass(cls):
@@ -116,7 +161,7 @@ class CevrimdisiUctanUcaTesti(unittest.TestCase):
         cls.json_yol = Path(cls.gecici.name) / "sonuc.json"
         cls.kod = main([
             "iphone", "--mod", "urun",
-            "-m", "trendyol,n11,hepsiburada,amazon", "-p", "1",
+            "-m", ",".join(BEKLENEN), "-p", "1",
             "--html-dizin", str(ORNEK_DIZIN),
             "--json", str(cls.json_yol),
         ])
@@ -132,8 +177,8 @@ class CevrimdisiUctanUcaTesti(unittest.TestCase):
     def test_sema(self):
         self.assertEqual(self.veri["mod"], "urun")
         self.assertEqual(self.veri["sorgu"], "iphone")
-        self.assertEqual(self.veri["toplam"], 16)
-        self.assertEqual(len(self.veri["siteler"]), 4)
+        self.assertEqual(self.veri["toplam"], TOPLAM_BEKLENEN)
+        self.assertEqual(len(self.veri["siteler"]), 9)
 
     def test_site_basina_sonuc(self):
         for s in self.veri["siteler"]:
@@ -144,6 +189,14 @@ class CevrimdisiUctanUcaTesti(unittest.TestCase):
                 for alan in ("ad", "fiyat", "para", "url", "satici",
                              "yorum", "puan"):
                     self.assertIn(alan, u)
+
+    def test_para_birimleri(self):
+        for s in self.veri["siteler"]:
+            beklenen = ("USD" if s["site"] in ("ebay", "aliexpress")
+                        else "TL")
+            with self.subTest(site=s["site"]):
+                for u in s["urunler"]:
+                    self.assertEqual(u["para"], beklenen)
 
     def test_fiyat_artan_siralanabilir(self):
         fiyatlar = [u["fiyat"] for s in self.veri["siteler"]
@@ -245,6 +298,40 @@ class AramaSekmesiTesti(unittest.TestCase):
         self.assertEqual(self.app._tl(39999.0), "39.999,00 TL")
         self.assertEqual(self.app._tl(0), "0,00 TL")
         self.assertEqual(self.app._tl(None), "-")
+
+    def test_diger_para_birimleri(self):
+        self.assertEqual(self.app._tl(12.34, "USD"), "12,34 USD")
+        self.assertEqual(self.app._tl(9.99, "EUR"), "9,99 EUR")
+        self.assertEqual(self.app._tl(None, "USD"), "-")
+
+    def test_9_site_sozlesmesi(self):
+        self.assertEqual(len(gui.ARAMA_SITELERI), 9)
+        for site in gui.ARAMA_SITELERI:
+            self.assertIn(site, gui.SITE_ETIKET)
+            self.assertIn(site, ayristir.URL_SABLON)
+
+    def test_karisik_para_gosterimi(self):
+        veri = {
+            "mod": "urun", "sorgu": "kulaklik", "toplam": 2,
+            "siteler": [
+                {"site": "ebay", "hata": None, "urunler": [
+                    {"ad": "USD Urun", "fiyat": 12.34, "para": "USD",
+                     "url": "https://www.ebay.com/itm/1",
+                     "satici": "", "yorum": 0, "puan": None}]},
+                {"site": "pazarama", "hata": None, "urunler": [
+                    {"ad": "TL Urun", "fiyat": 500.0, "para": "TL",
+                     "url": "https://www.pazarama.com/x-p-1",
+                     "satici": "", "yorum": 0, "puan": None}]},
+            ],
+        }
+        self.app.paz_goster(veri)
+        satirlar = [self.app.paz_agac.item(i, "values")
+                    for i in self.app.paz_agac.get_children()]
+        self.assertEqual(len(satirlar), 2)
+        # TL grubu önce gelir
+        self.assertEqual(satirlar[0][0], "Pazarama")
+        self.assertEqual(satirlar[0][2], "500,00 TL")
+        self.assertEqual(satirlar[1][2], "12,34 USD")
 
 
 if __name__ == "__main__":
