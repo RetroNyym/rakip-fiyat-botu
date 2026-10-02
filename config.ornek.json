@@ -6,7 +6,8 @@
     "bildirim": "telegram",
     "ipucu_goster": true,
     "telegram_token": "",
-    "telegram_chat_id": ""
+    "telegram_chat_id": "",
+    "polar_org_id": ""
   },
   "lisans": "",
   "urunler": [

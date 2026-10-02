@@ -55,6 +55,10 @@ klasörünüzdeki ikinci kopya); tek bir dosyanın silinmesi sayacı sıfırlama
 | Saklama yeri | `config.json` → `"lisans"` alanı (bir daha sormaz) |
 | Hak bittiğinde | Arayüzde kilit penceresi; CLI'da **çıkış kodu 4** |
 | Geçersiz anahtar | CLI'da **çıkış kodu 1** |
+| Polar anahtarı girişi | Aynı alan (ilk girişte **internet gerekir**, cihaz etiketi kaydedilir) |
+| Polar doğrulama | Başlatmada ve 7 günde bir; internetsiz **30 gün** çalışmaya devam |
+| Polar reddederse | CLI'da **çıkış kodu 5**; arayüzde işlemler kilitlenir |
+| Cihaz limiti | Aynı anahtar en fazla belirli sayıda cihazda açılır (satıcı belirler) |
 
 Zamanlanmış tarama (`tarama.bat`) da her çalıştırmada 1 hak harcar —
 deneme süresince günde bir kez çalıştırırsanız 5 gün kullanabilirsiniz.

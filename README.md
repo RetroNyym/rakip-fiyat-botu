@@ -117,7 +117,8 @@ python rakip_takip.py --config baska.json
 ```
 
 **Çıkış kodları:** `0` başarılı · `1` config / geçersiz anahtar ·
-`4` deneme hakkı doldu (lisans gerekli).
+`4` deneme hakkı doldu (lisans gerekli) · `5` Polar online doğrulama
+başarısız (iptal / süre / cihaz limiti / ağ).
 
 > Deneme hakkı hem GUI'de hem CLI'da **ortaktır**: her tarama / ürün arama /
 > ithalat sorgusu 1 hak harcar. Hak sayacı `data/limit.json` **ve**
@@ -331,6 +332,47 @@ python rakip_takip.py --sifirla SIFIRLA-…
 Jeton Ed25519 ile imzalanır; özel anahtar dağıtılan pakette bulunmadığı için
 **müşteri kendi sayacını sıfırlayamaz** (`lisans.hak_sifirla()` jetonsuz
 `False` döner). Geçersiz jetonda CLI çıkış `1` verir ve sayaç değişmez.
+
+### Polar anahtarı ile cihaz aktivasyonu
+
+Polar'ın `/v1/customer-portal/license-keys/*` uçları **auth'suz** üretilmiştir
+("saf bir masaüstü uygulamasında güvenle kullanılabilir") — yani istemcide
+saklanacak bir API sırrı yok ve **kendi doğrulama sunucunuzu kurmanız gerekmez.**
+Cihaz limiti, iptal ve süre kontrolü Polar'ın kendisinde yaşar.
+
+**Kurulum (Polar Dashboard):**
+
+1. **Benefits → License key** benefit'i oluşturun: anahtar ön eki `RN1_`,
+   **activation limit** = 3 (ör. aynı anda en fazla 3 cihaz), isteğe bağlı süre.
+2. **Settings → Organization** sayfasındaki UUID'yi kopyalayın.
+3. Uygulamada tanımlayın (üçünden biri): `config.json → ayarlar.polar_org_id`
+   · `POLAR_ORG_ID` ortam değişkeni · `polar_lisans.py` içindeki `ORG_ID`.
+   `.exe` derlemeden **önce** doldurun; boşsa Polar anahtarı kabul edilmez
+   (`paketle.py --exe` bu durumda uyarır).
+
+**İstemci akışı (`polar_lisans.py`):**
+
+| Adım | Ne olur |
+|---|---|
+| `--lisans <Polar anahtarı>` | `activate` (cihaz etiketi `CIHAZ-…`) → `validate` → kaydet |
+| Her çalışma öncesi | Önbellek **7 gün** tazeyse ağ çağrısı yapılmaz |
+| `validate` → 404/400 | İptal, süre dolu veya aktivasyon uyuşmuyor → **çıkış 5**, GUI'de işlemler kilitli |
+| Ağ yok | Son başarılı doğrulamanın üzerinden **30 gün** geçmemişse çalışmaya devam |
+| `activate` → 403 | Cihaz limiti dolu → çıkış 5 (Pano'dan başka bir aktivasyonu kaldırın) |
+
+**İptal:** Polar Dashboard → lisansı `revoked` yapın; müşteri de kendi
+portalinden aktivasyonunu sıfırlayabilir (yeni cihaza taşınma).
+
+**İki kanal — hangisi ne işe yarar:**
+
+| Kanal | Anahtar | Doğrulama | Cihaz limiti | İptal |
+|---|---|---|---|---|
+| RN1 (yerel) | `RN1-…-<imza>` | Ed25519, çevrimdışı | yok | yok |
+| Polar | Polar üretir | online + 30 gün çevrimdışı lütuf | **var** | panelden |
+
+⚠️ Kanalları karıştırmayın: `anahtar_servisi.py` webhook'u RN1 anahtarı üretir.
+Polar benefit'ini etkinleştirdiyseniz webhook'u kapatın — aksi hâlde müşteriye
+iki farklı anahtar gider.
 
 ### Dağıtım paketi
 

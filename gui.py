@@ -66,6 +66,7 @@ except ImportError:
 
 import rakip_takip as cekirdek
 import lisans
+import polar_lisans
 
 
 # ==========================================================================
@@ -580,6 +581,7 @@ class Uygulama(tk.Tk):
         self.radar_iptal = False
         self.radar_sonuc: dict | None = None
         self.gorsel_gosteriliyor = False
+        self.polar_durum: tuple[bool, str] | None = None   # online lisans
 
         # --- stil (karanlık tema) ---
         self.stil = ttk.Style(self)
@@ -599,6 +601,7 @@ class Uygulama(tk.Tk):
         self.liste_doldur()
         self._alanlari_yukle()
         self._kuyruk_isle()
+        self._polar_kontrol_et()
         self._lisans_notu()
         self.protocol("WM_DELETE_WINDOW", self._kapat)
 
@@ -722,9 +725,57 @@ class Uygulama(tk.Tk):
         if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
             self.konsol_yaz("🔑 Lisans geçerli — tüm özellikler açık.")
             return
+        anahtar = (self.ayar.get("lisans") or "").strip()
+        if anahtar and not polar_lisans.rn1_mi(anahtar):
+            # Polar anahtarı: sonucu _polar_kontrol_et arka planda yazdırır.
+            self.konsol_yaz("🔑 Polar lisans anahtarı — doğrulanıyor…")
+            return
         kalan = lisans.hak_kalan()
         self.konsol_yaz(f"🎫 Deneme: {kalan}/{lisans.HAK_SINIRI} sorgu "
                         "hakkınız var — Araçlar → Lisans…")
+
+    def _polar_kontrol_et(self) -> None:
+        """Polar anahtarı için online doğrulamayı arka planda başlatır.
+
+        RN1 (yerel imza), deneme modu veya anahtar yoksa **ağ çağrısı
+        yapmaz**. Sonuç ``self.polar_durum``a yazılır:
+        ``(geçerli, mesaj)`` — beklemede ``(True, "bekliyor")``.
+        """
+        anahtar = (self.ayar.get("lisans") or "").strip()
+        if not anahtar or polar_lisans.rn1_mi(anahtar) or lisans.test_mi():
+            return
+        self.polar_durum = (True, "bekliyor")
+
+        def _calis() -> None:
+            try:
+                sonuc = polar_lisans.lisans_kontrol(self.ayar)
+            except Exception as hata:                        # noqa: BLE001
+                sonuc = (False, f"beklenmeyen hata: {hata}")
+            self.polar_durum = sonuc
+            try:
+                self.after(0, self._polar_sonuc_isle)
+            except (RuntimeError, TclError):                 # pencere kapandı
+                pass
+
+        threading.Thread(target=_calis, daemon=True).start()
+
+    def _polar_sonuc_isle(self) -> None:
+        """Arka plandaki Polar sonucu konsola yazar (başarısızsa kilitler)."""
+        if not self.polar_durum or self.polar_durum[1] == "bekliyor":
+            return
+        ok, mesaj = self.polar_durum
+        if ok:
+            self.konsol_yaz("🔑 Lisans doğrulandı (Polar) — tüm özellikler açık.")
+            return
+        self.konsol_yaz(f"⛔ Lisans doğrulaması başarısız: {mesaj}")
+        self.durum_deg.set("Lisans doğrulaması başarısız — işlemler kilitli.")
+
+    def _polar_kilit(self) -> str | None:
+        """Polar doğrulaması reddediyorsa kilit mesajı, aksi hâlde ``None``."""
+        if (self.polar_durum and not self.polar_durum[0]
+                and self.polar_durum[1] != "bekliyor"):
+            return self.polar_durum[1]
+        return None
 
     def _hak_tuket(self, islem: str) -> bool:
         """Bir sorgu hakkı harcar; sınır dolduysa lisans penceresi açar.
@@ -736,6 +787,14 @@ class Uygulama(tk.Tk):
         """
         if lisans.test_mi():
             return True
+        kilit = self._polar_kilit()
+        if kilit:
+            self.durum_deg.set("Lisans doğrulaması başarısız — işlem kilitli.")
+            messagebox.showerror(
+                "Lisans Doğrulaması Başarısız",
+                f"{kilit}\n\nPolar anahtarınız geçersiz/iptal veya cihaz "
+                "limiti dolmuş olabilir.")
+            return False
         if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
             return True
         if lisans.hak_tuket():

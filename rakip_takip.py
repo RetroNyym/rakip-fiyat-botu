@@ -24,6 +24,7 @@ CLI:
   python rakip_takip.py --config baska.json
 
 Çıkış kodları: 0 başarılı · 1 config/anahtar hatası · 4 lisans/deneme hakkı yok
+  · 5 Polar online doğrulama başarısız (iptal/süre/cihaz limiti/ağ)
 
 GUI:
   python gui.py
@@ -44,6 +45,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import lisans
+import polar_lisans
 from kok_yol import veri_kok
 from urllib import robotparser
 from urllib.parse import urljoin, urlparse
@@ -832,6 +834,7 @@ def test_telegram(config: dict, log: Optional[LogFn] = None) -> bool:
 # CLI
 # --------------------------------------------------------------------------
 CIKIS_LISANS = 4          # deneme hakkı doldu / lisans gerekli
+CIKIS_AKTIVASYON = 5      # Polar online doğrulama başarısız
 
 
 def _hak_al(config: dict, islem: str) -> bool:
@@ -868,7 +871,8 @@ def main() -> None:
     p = argparse.ArgumentParser(
         description="Rakip fiyat takip botu",
         epilog=f"Çıkış kodları: 0 başarılı · 1 config/anahtar hatası · "
-               f"{CIKIS_LISANS} lisans/deneme hakkı yok")
+               f"{CIKIS_LISANS} lisans/deneme hakkı yok · "
+               f"{CIKIS_AKTIVASYON} Polar doğrulama başarısız")
     p.add_argument("--config", default=str(VARSAYILAN_CONFIG))
     p.add_argument("--rapor", action="store_true", help="Fiyat geçmişini göster")
     p.add_argument("--inspect", metavar="URL", help="CSS seçici bul")
@@ -908,9 +912,20 @@ def main() -> None:
 
     if args.lisans is not None:
         anahtar = args.lisans.strip()
-        if not lisans.anahtar_gecerli(anahtar):
-            print("✖ Geçersiz lisans anahtarı.")
-            sys.exit(1)
+        if polar_lisans.rn1_mi(anahtar):
+            # Yerel Ed25519 kanalı: internet gerekmez, imza yeterli.
+            if not lisans.anahtar_gecerli(anahtar):
+                print("✖ Geçersiz lisans anahtarı.")
+                sys.exit(1)
+        else:
+            # Polar anahtarı: online doğrula + bu cihazı etkinleştir.
+            aday = dict(config)
+            aday["lisans"] = anahtar
+            gecerli, mesaj = polar_lisans.lisans_kontrol(aday, zorla=True)
+            if not gecerli:
+                print(f"✖ Lisans doğrulaması başarısız: {mesaj}")
+                sys.exit(CIKIS_AKTIVASYON)
+            print(f"✔ {mesaj}")
         config["lisans"] = anahtar
         try:
             config_kaydet(config, args.config)
@@ -920,6 +935,11 @@ def main() -> None:
         print("✔ Lisans doğrulandı ve kaydedildi — tüm özellikler açık.")
         if not (args.rapor or args.inspect or args.test):
             return
+
+    gecerli, mesaj = polar_lisans.lisans_kontrol(config)
+    if not gecerli:
+        print(f"⛔ Lisans doğrulaması başarısız: {mesaj}")
+        sys.exit(CIKIS_AKTIVASYON)
 
     if args.inspect:
         if not _hak_al(config, "Seçici Bul"):

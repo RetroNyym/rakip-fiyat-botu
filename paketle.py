@@ -283,6 +283,12 @@ def exe_uret(zip_dahil: bool, hizli: bool = False) -> None:
     if (hedef / "lisans_uret.py").exists():
         hatalar.append("lisans_uret.py exe klasörüne girmiş")
 
+    import polar_lisans
+    if not polar_lisans.ORG_ID and not os.environ.get("POLAR_ORG_ID"):
+        print("⚠ DİKKAT: polar_lisans.ORG_ID boş — Polar anahtarı kabul "
+              "edilmez (yalnızca RN1/çevrimdışı anahtar çalışır). "
+              "Polar kanalı kullanacaksanız derlemeden önce doldurun.")
+
     # --- duman testleri (dondurulmuş paket gerçekten açılıyor mu?) ---
     if not hatalar and not hizli:
         print("▶ duman testleri: --help ve --kendini-sina …")
