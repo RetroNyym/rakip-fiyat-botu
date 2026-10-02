@@ -73,3 +73,12 @@ zamanlama_tarama.bat
 # --- Radar modüllerinin çalışma çıktıları (debug HTML/JSON/rapor) ---
 pazaryeri-radar/data/out/
 ithalat-radar/data/out/
+
+# --- 🔑 SATICI DOSYALARI — ASLA YAYINLANMAZ ---
+# lisans_uret.py içinde lisans anahtarını imzalayan ÖZEL anahtar var;
+# public depoda olduğu anda herkes sınırsız anahtar üretebilir.
+# (Depo public; dosya yerel kalır, paketle.py de takibi denetler.)
+lisans_uret.py
+
+# --- Paketleme çıktısı ---
+dist/

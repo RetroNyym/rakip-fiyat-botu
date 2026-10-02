@@ -3,6 +3,9 @@
     python -m ithalat ara "nike" --sayfa 1 --json ithalat_gui.json
     python -m ithalat firma company/nike --json ithalat_gui.json
     python -m ithalat tedarikci supplier/nike --json ithalat_gui.json
+
+Çıkış kodları: 0 başarılı · 2 ağ/yanıt hatası · 3 beklenmeyen hata ·
+4 lisans/deneme hakkı yok (GUI RIYA_IC=1 ile çağrır: ücreti o öder)
 """
 from __future__ import annotations
 
@@ -18,6 +21,7 @@ from .arama import ara
 from .sayfa import sayfa_al
 
 KOK = Path(__file__).resolve().parent.parent
+CIKIS_LISANS = 4
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -44,8 +48,41 @@ def argumanlari(argv: list[str] | None = None) -> argparse.Namespace:
     return p.parse_args(argv)
 
 
+def _lisans_kontrol() -> int | None:
+    """Deneme hakkı harcar; ``None`` → devam, int → o çıkış koduyla çık.
+
+    GUI ücreti ödedikten sonra ``RIYA_IC=1`` ile çağırır (yeniden ödeme yok).
+    Lisans modülü bulunamazsa denetim yapılamaz (bağımsız kullanım).
+    """
+    kok = KOK.parent
+    try:
+        if str(kok) not in sys.path:
+            sys.path.insert(0, str(kok))
+        import lisans
+    except Exception:                                   # noqa: BLE001
+        return None
+    try:
+        config = json.loads((kok / "config.json").read_text(encoding="utf-8-sig"))
+    except Exception:                                   # noqa: BLE001
+        config = {}
+    if lisans.ayar_izinli(config):
+        return None
+    if lisans.hak_tuket():
+        kalan = lisans.hak_kalan()
+        yaz(f"🎫 Deneme hakkı kullanıldı — kalan {kalan} hak.")
+        return None
+    yaz(f"⛔ Deneme hakkınız doldu ({lisans.HAK_SINIRI} sorgu) — "
+        "ithalat sorgusu durduruldu.")
+    yaz("   Lisans: Araçlar → Lisans… (GUI) veya "
+        "python rakip_takip.py --lisans RN1-…")
+    return CIKIS_LISANS
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argumanlari(argv)
+    kilit = _lisans_kontrol()
+    if kilit is not None:
+        return kilit
     yaz("=" * 60)
     yaz(f"🌍 ithalat {__version__} · {args.komut}: {args.hedef}")
     yaz("=" * 60)
