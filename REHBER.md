@@ -125,7 +125,7 @@ Pencere çok daralırsa otomatik gizlenirler.
 
 ## 7) Marka kutusu (sadece görünüm)
 ![Marka](docs/rehber/09-marka.png)
-`RAKİP FİYAT BOTU v2.6` — logo ve slogan. **Tıklanmaz.**
+`RAKİP FİYAT BOTU v2.7` — logo ve slogan. **Tıklanmaz.**
 
 ## 8) Form alanları (4 adet)
 ![Alanlar](docs/rehber/10-alanlar.png)
@@ -267,6 +267,10 @@ Uyarı eşiği (Ayarlar penceresindeki "Uyarı eşiği" ile aynı):
 - **Üstteki özet:** *"4 ürün tarandı · 2 değişiklik · 1 sorun"*
 - **CSV Aktar** → sonuç tablosunu Excel'e yazar (bkz. buton 3).
 - **Temizle** → tabloyu ve özeti boşaltır (*"Temizlendi."*).
+- **Sıralama:** bir sütun başlığına tıklayın → ▲ artan / ▼ azalan
+  (boş hücreler hep sonda kalır; başlığa tekrar tıklayınca yön değişir).
+- **☑ Sadece değişenler:** yalnızca `DEĞİŞTİ` satırlarını gösterir;
+  işareti kaldırınca tablo tümüyle geri gelir.
 
 | Sütun | Anlamı |
 |---|---|
@@ -296,14 +300,15 @@ sonuçlar **fiyat artan sırayla** bu sekmeye düşer.
 | eBay · AliExpress · Çiçeksepeti | 🚧 Ağ güvenliği duvarı engelliyor — **VPN ile açılır** (açıkken ✗ yerine sonuç gelir) |
 | Etsy | 🚧 Bot doğrulaması (captcha) gösterebilir — VPN/farklı IP ile deneyin |
 
-- Arama kutusu **sol panelde** (Enter ya da 🔍).
+- Arama kutusu **sol panelde** (Enter ya da 🔍); altındaki **Sayfa**
+  kutusuyla **1–5. sayfaya** kadar aranır (kutuyu değiştirip Enter'a basın).
 - Özet satırında site başına sonuç sayısı görünür; erişilemeyen site ✗ ile işaretlenir.
 - Farklı para birimli ürünler (eBay/AliExpress: USD) ayrı grupta, para birimiyle gösterilir.
 
 | Buton | Ne yapar |
 |---|---|
 | **🌐 Tarayıcıda Aç** | Seçili ürünün sayfasını tarayıcıda açar |
-| **＋ Takibe Al** | Seçili ürünü takip listesine ekler (ad + link hazır gelir) |
+| **＋ Takibe Al** | Seçili ürün(ler)i takip listesine ekler — sonuçları **çoklu seçip** (Ctrl+sol tık) topluca ekleyebilirsiniz; zaten listedekiler atlanır |
 | **📋 Linki Kopyala** | Ürün linkini panoya kopyalar |
 | **🗑 Temizle** | Sonuçları siler |
 | **📄 CSV Aktar** | Sonuç tablosunu CSV yapar |
@@ -314,6 +319,8 @@ sonuçlar **fiyat artan sırayla** bu sekmeye düşer.
 
 - **Önce soldaki listeden bir ürün seçin** → o ürünün gün gün fiyatları tabloya düşer,
   sağdaki alanada **grafik** çizilir.
+- **Dönem kutusu:** üstteki açılır liste tabloyu ve grafiği **7 gün /
+  30 gün / 90 gün / 1 yıl / Tümü** aralığına daraltır (varsayılan: Tümü).
 - **Butonlar:**
 
 | Buton | Ne yapar |
@@ -371,6 +378,7 @@ Rakibinin **nereden mal aldığını** keşfeder — ABD denizyolu ithalat kayı
 | **Firma / Marka** | Aranacak firma adı (örn. *"nike"*) — Enter da çalışır |
 | **▶ Ara** | Aramayı başlatır; sonuçlar tabloya düşer |
 | **⬅ Geri** | Bir önceki görüntüye döner (arama ↔ detay geçmişi) |
+| **⬅ Önceki / Sonraki ➡** | Çok sayfalı aramalarda sayfa değiştirir (her sayfa 1 deneme hakkı harcar; 3. sayfada durur) |
 | **📄 CSV Aktar** | Listeyi `.csv` yapar (Araçlar menüsündeki CSV menüsüne de eklendi) |
 | **🌐 Tarayıcıda Aç** | Aynı aramayı/sayfayı tarayıcıda importyeti.com'da açar |
 | **Çift tık** | Satıra çift tık → o firmanın tedarikçileri (veya müşterileri) açılır |
@@ -445,8 +453,10 @@ Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede bo�
 | **Lisans penceresi** | `RN1-…` biçimindeki anahtarı yazıp **Doğrula**: `config.json` → `lisans` alanına kaydedilir ve kalıcı olarak açılır |
 | **Menü** | **Araçlar → Lisans…** — kalan hak durumunu gösterir, anahtar girmeyi sağlar |
 | **Otomatik takip** | Kendiliğinden başlayan tekrar taramalar **hak yemez** — yalnızca elle başlattıklarınız sayılır |
-| **Sayaç dosyası** | `data/limit.json` (yalnızca bilgisayarınızda tutulur, git'e girmez) |
-| **Üretim** | Anahtarlar satıcı tarafından `python lisans_uret.py` ile üretilir |
+| **Sayaç dosyası** | `data/limit.json` **ve** ikinci kopya (`%APPDATA%\RakipFiyatBot\limit.json`); dosyalardan biri silinse diğeri sayacı taşır — deneme hakkı sıfırlanamaz |
+| **Anahtar güvenliği** | Anahtarlar **asimetrik (Ed25519)** imzalıdır; kaynak kodu elde geçen biri yeni anahtar **üretemez** |
+| **CLI ile giriş** | `python rakip_takip.py --lisans RN1-…` — GUI ile aynı deneme sayacını paylaşır (kilitlenince çıkış kodu 4) |
+| **Üretim** | Anahtarlar satıcı tarafından `python lisans_uret.py` ile üretilir (bu dosya git'e girmez) |
 
 > Kilit penceresi görseli bu rehberde yoktur; açılışta ve sınır dolduğunda
 > konsolda kalan hak sayısı yazılır.
@@ -511,5 +521,5 @@ Tarama sırasında dolar (`1/4`, `2/4`…). Bittiğinde %100 olur, beklemede bo�
 
 ---
 
-*Rehber, programın v2.6 arayüzüne göre hazırlanmıştır. Görseller:
+*Rehber, programın v2.7 arayüzüne göre hazırlanmıştır. Görseller:
 [`docs/rehber/`](docs/rehber/) klasöründedir.*

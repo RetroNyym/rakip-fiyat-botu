@@ -702,7 +702,7 @@ class Uygulama(tk.Tk):
     # ------------------------------------------------------------------
     def _lisans_notu(self) -> None:
         """Açılışta kalan deneme hakkını konsola yazar (test modunda susar)."""
-        if os.environ.get("RIYA_TESTI") == "1":
+        if lisans.test_mi():
             return
         if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
             self.konsol_yaz("🔑 Lisans geçerli — tüm özellikler açık.")
@@ -714,9 +714,12 @@ class Uygulama(tk.Tk):
     def _hak_tuket(self, islem: str) -> bool:
         """Bir sorgu hakkı harcar; sınır dolduysa lisans penceresi açar.
 
-        Lisans geçerliyse veya test modu (RIYA_TESTI=1) açıkken harcanmaz.
+        Lisans geçerliyse veya test modu (lisans.test_mi()) açıkken harcanmaz.
+        (RIYA_IC=1 yalnızca GUI'nin ücreti ödediği alt süreçler içindir;
+        bu metot asla RIYA_IC'ye bakmaz — aksi halde ortam değişkeniyle
+        atlatılabilirdi.)
         """
-        if os.environ.get("RIYA_TESTI") == "1":
+        if lisans.test_mi():
             return True
         if lisans.anahtar_gecerli(self.ayar.get("lisans") or ""):
             return True
@@ -897,7 +900,7 @@ class Uygulama(tk.Tk):
         tk.Label(sol, text="FİYAT TAKİP BOTU", bg=RENKLER["baslik_bant"],
                  fg=RENKLER["baslik"],
                  font=("Segoe UI", 13, "bold")).pack(side=LEFT, padx=(7, 0))
-        tk.Label(sol, text=" v2.6 ", bg=RENKLER["vurgu"], fg="#06121f",
+        tk.Label(sol, text=" v2.7 ", bg=RENKLER["vurgu"], fg="#06121f",
                  font=("Segoe UI", 8, "bold"), padx=5, pady=1
                  ).pack(side=LEFT, padx=(8, 0))
         self._rozetler = []
@@ -1011,7 +1014,7 @@ class Uygulama(tk.Tk):
         tk.Label(satir, text="RAKİP FİYAT BOTU", bg=RENKLER["panel"],
                  fg=RENKLER["baslik"],
                  font=("Segoe UI", 12, "bold")).pack(side=LEFT)
-        tk.Label(satir, text=" v2.6 ", bg=RENKLER["vurgu"], fg="#06121f",
+        tk.Label(satir, text=" v2.7 ", bg=RENKLER["vurgu"], fg="#06121f",
                  font=("Segoe UI", 8, "bold"), padx=4
                  ).pack(side=LEFT, padx=(6, 0))
         tk.Label(marka_sag,
@@ -1061,6 +1064,22 @@ class Uygulama(tk.Tk):
         self._ipucu(ekle_btn,
                     "Kutudaki ürün linkini takip listesine ekler "
                     "(sadece http/https linkleri).")
+
+        # 1b) ARAMA SAYFASI — her sitede kaç sayfa taranacak
+        self._alan_etiketi(alanlar, "ARAMA SAYFASI (HER SİTEDE)")
+        satir_s = tk.Frame(alanlar, bg=RENKLER["panel"])
+        satir_s.pack(fill=X, pady=(0, 2))
+        self.paz_sayfa = IntVar(value=1)
+        paz_sayfa_kutu = ttk.Spinbox(satir_s, from_=1, to=5, increment=1,
+                                     width=4, textvariable=self.paz_sayfa)
+        paz_sayfa_kutu.pack(side=LEFT)
+        self._ipucu(paz_sayfa_kutu,
+                    "Ürün Arama'da her site için taranacak sayfa sayısı "
+                    "(1-5). Arttıkça daha çok sonuç ama tarama daha uzun "
+                    "sürer.")
+        tk.Label(satir_s, text=" sayfa — çok sonuç için artırın",
+                 bg=RENKLER["panel"], fg=RENKLER["gri"],
+                 font=("Segoe UI", 8)).pack(side=LEFT, padx=(6, 0))
 
         # 2) TAKİP PERİYODU
         self._alan_etiketi(alanlar, "TAKİP PERİYODU")
@@ -1232,6 +1251,11 @@ class Uygulama(tk.Tk):
         self.ozet_deg = StringVar(value="Henüz tarama yapılmadı.")
         ttk.Label(ust2, textvariable=self.ozet_deg,
                   font=("Segoe UI", 10, "bold")).pack(side=LEFT)
+        self.sadece_degisen = BooleanVar(value=False)
+        ttk.Checkbutton(
+            ust2, text="⚠ Sadece değişenler",
+            variable=self.sadece_degisen,
+            command=self.sonuclari_yenile).pack(side=RIGHT, padx=(0, 10))
         ttk.Button(ust2, text="CSV Aktar",
                    command=lambda: self._csv_aktar("sonuclar")).pack(
             side=RIGHT)
@@ -1241,12 +1265,12 @@ class Uygulama(tk.Tk):
         skolonlar = ("ad", "onceki", "yeni", "yuzde", "durum", "mesaj")
         self.sonuc_agac = ttk.Treeview(sonuc_sayfa, columns=skolonlar,
                                        show="headings", height=4)
-        basliklar = {"ad": "Ürün", "onceki": "Önceki", "yeni": "Yeni",
-                     "yuzde": "Değişim", "durum": "Durum", "mesaj": "Mesaj"}
         genislik = {"ad": 240, "onceki": 110, "yeni": 110, "yuzde": 90,
                     "durum": 100, "mesaj": 240}
         for k in skolonlar:
-            self.sonuc_agac.heading(k, text=basliklar[k])
+            self.sonuc_agac.heading(
+                k, text=self.SONUC_BASLIKLAR[k],
+                command=lambda kk=k: self._sonuc_sirala(kk))
             self.sonuc_agac.column(k, width=genislik[k],
                                    anchor=W if k in ("ad", "mesaj") else CENTER)
         s_dikey = ttk.Scrollbar(sonuc_sayfa, orient="vertical",
@@ -1278,6 +1302,17 @@ class Uygulama(tk.Tk):
                                command=lambda: self._csv_aktar("gecmis")),
                     "Seçili ürünün günlük fiyatlarını CSV yapar."
                     ).pack(side=RIGHT, padx=(0, 6))
+        ttk.Label(g_ust, text="Dönem:").pack(side=RIGHT, padx=(0, 4))
+        self.gecmis_donem = StringVar(value="Tümü")
+        donem_kutu = ttk.Combobox(
+            g_ust, textvariable=self.gecmis_donem, state="readonly",
+            values=("7 gün", "30 gün", "90 gün", "1 yıl", "Tümü"),
+            width=7, justify="center")
+        donem_kutu.pack(side=RIGHT)
+        donem_kutu.bind("<<ComboboxSelected>>",
+                        lambda _e: (self.gecmis_yenile(), self.grafik_ciz()))
+        self._ipucu(donem_kutu,
+                    "Tablo ve grafikte gösterilecek zaman aralığı.")
 
         self.gecmis_agac = ttk.Treeview(
             gecmis_sayfa, columns=("tarih", "fiyat"), show="headings",
@@ -1462,7 +1497,7 @@ class Uygulama(tk.Tk):
 
     def _hosgeldin_goster(self) -> None:
         """Kısa 'nasıl kullanılır' penceresi; 'bir daha gösterme' ile kapanır."""
-        if os.environ.get("RIYA_TESTI") == "1":
+        if lisans.test_mi():
             return
         ayar = self.ayar.setdefault("ayarlar", {})
         if not ayar.get("ipucu_goster", True):
@@ -2276,9 +2311,18 @@ class Uygulama(tk.Tk):
         self.durum_deg.set("Durduruluyor…")
         self.konsol_yaz("■ Tarama durduruluyor…")
 
+    SONUC_BASLIKLAR = {"ad": "Ürün", "onceki": "Önceki", "yeni": "Yeni",
+                       "yuzde": "Değişim", "durum": "Durum",
+                       "mesaj": "Mesaj"}
+
     def sonuclari_doldur(self, sonuclar: list[dict]):
+        if getattr(self, "sadece_degisen", None) is not None \
+                and self.sadece_degisen.get():
+            goster = [s for s in sonuclar if s.get("durum") == "degisti"]
+        else:
+            goster = sonuclar
         self.sonuc_agac.delete(*self.sonuc_agac.get_children())
-        for s in sonuclar:
+        for s in goster:
             durum_adi = {
                 "ilk": "İlk kayıt", "degismedi": "Değişmedi",
                 "degisti": "▲ Değişti", "bulunamadi": "Bulunamadı",
@@ -2310,8 +2354,42 @@ class Uygulama(tk.Tk):
                                       foreground=RENKLER["vurgu"])
 
     def sonuclari_temizle(self):
+        self.son_tarama = []
         self.sonuc_agac.delete(*self.sonuc_agac.get_children())
         self.ozet_deg.set("Temizlendi.")
+
+    def sonuclari_yenile(self):
+        """Filtre/sıralama değişince tabloyu yeniden doldurur."""
+        self.sonuclari_doldur(self.son_tarama)
+
+    def _sonuc_sirala(self, kolon: str) -> None:
+        """Sonuç tablosunu kolon başlığına tıklayarak sıralar (artan/azalan)."""
+        if not hasattr(self, "_sonuc_yon"):
+            self._sonuc_yon = {}
+        yon = not self._sonuc_yon.get(kolon, False)
+        self._sonuc_yon = {kolon: yon}          # tek kolon aktif
+        anahtarlar = {
+            "ad": lambda s: (s.get("ad") or "").lower(),
+            "onceki": lambda s: s.get("onceki"),
+            "yeni": lambda s: s.get("fiyat"),
+            "yuzde": lambda s: s.get("yuzde"),
+            "durum": lambda s: s.get("durum") or "",
+            "mesaj": lambda s: (s.get("mesaj") or "").lower(),
+        }
+        anahtar = anahtarlar[kolon]
+        veri = list(self.son_tarama)
+        bos = [s for s in veri if anahtar(s) is None]
+        dolu = [s for s in veri if anahtar(s) is not None]
+        dolu.sort(key=anahtar, reverse=not yon)
+        self.son_tarama = dolu + bos            # boş değerler hep sonda
+        for k, baslik in self.SONUC_BASLIKLAR.items():
+            ok = ""
+            if k == kolon:
+                ok = " ▲" if yon else " ▼"
+            self.sonuc_agac.heading(
+                k, text=baslik + ok,
+                command=lambda kk=k: self._sonuc_sirala(kk))
+        self.sonuclari_doldur(self.son_tarama)
 
     # ------------------------------------------------------------------
     #  Rakip Radar (pazaryeri-radar)
@@ -2475,7 +2553,8 @@ class Uygulama(tk.Tk):
             kod = -1
             hata = None
             try:
-                ortam = dict(os.environ, PYTHONIOENCODING="utf-8")
+                ortam = dict(os.environ, PYTHONIOENCODING="utf-8",
+                             RIYA_IC="1")
                 surec = subprocess.Popen(
                     komut, cwd=str(kok), stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True, encoding="utf-8",
@@ -2601,8 +2680,9 @@ class Uygulama(tk.Tk):
                     ).pack(side=LEFT, padx=(0, 4))
         self._ipucu(ttk.Button(ust, text="＋ Takibe Al",
                                command=self.paz_takibe_al),
-                    "Seçili ürünü fiyat takip listesine ekler "
-                    "(ad + link hazır gelir, Kaydet'e basın)."
+                    "Seçili ürünü/ürünleri fiyat takip listesine ekler "
+                    "(çoklu seçimde hepsi birden eklenir; tek seçimde "
+                    "onay penceresi açılır)."
                     ).pack(side=LEFT, padx=4)
         self._ipucu(ttk.Button(ust, text="📋 Linki Kopyala",
                                command=self.paz_kopyala),
@@ -2704,15 +2784,20 @@ class Uygulama(tk.Tk):
             json_yol.unlink()
 
         py = radar_python_bul(kok)
+        try:
+            sayfa_sayisi = max(1, min(5, int(self.paz_sayfa.get())))
+        except (TypeError, ValueError, TclError):
+            sayfa_sayisi = 1
         komut = [str(py), "-m", "radar", sorgu, "--mod", "urun",
-                 "-m", ",".join(ARAMA_SITELERI), "-p", "1",
+                 "-m", ",".join(ARAMA_SITELERI), "-p", str(sayfa_sayisi),
                  "--sayfa-bekleme", "1", "--json", str(json_yol)]
 
         self.paz_suriyor = True
         if hasattr(self, "paz_ara_btn"):
             self.paz_ara_btn.configure(state="disabled")
         self.ust_sayfa.select(self.arama_sayfa)
-        mesaj = (f"🔍 '{sorgu}' {len(ARAMA_SITELERI)} sitede aranıyor… "
+        mesaj = (f"🔍 '{sorgu}' {len(ARAMA_SITELERI)} sitede, "
+                 f"{sayfa_sayisi}. sayfaya kadar aranıyor… "
                  "(erişilemeyen siteler ✗ ile işaretlenir)")
         self.paz_ozet.set(mesaj)
         self.konsol_yaz(mesaj)
@@ -2726,7 +2811,8 @@ class Uygulama(tk.Tk):
             kod = -1
             hata = None
             try:
-                ortam = dict(os.environ, PYTHONIOENCODING="utf-8")
+                ortam = dict(os.environ, PYTHONIOENCODING="utf-8",
+                             RIYA_IC="1")
                 surec = subprocess.Popen(
                     komut, cwd=str(kok), stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True, encoding="utf-8",
@@ -2854,13 +2940,54 @@ class Uygulama(tk.Tk):
         self.konsol_yaz(f"📋 Kopyalandı: {url}")
 
     def paz_takibe_al(self):
-        url, deger = self._paz_secili()
-        if not url:
+        secim = list(self.paz_agac.selection())
+        if not secim and self.paz_agac.focus():
+            secim = [self.paz_agac.focus()]
+        if not secim:
             messagebox.showinfo("Seçim yok",
-                                "Eklemek için bir ürün seçin.")
+                                "Eklemek için listeden ürün seçin "
+                                "(Ctrl+ ile çoklu seçim).")
             return
-        ad = deger[1] if len(deger) > 1 else ""
-        self.urun_ekle(url_on=url, ad_on=ad)
+        if len(secim) == 1:
+            url, deger = self._paz_secili()
+            if not url:
+                messagebox.showinfo("Seçim yok",
+                                    "Eklemek için bir ürün seçin.")
+                return
+            ad = deger[1] if len(deger) > 1 else ""
+            self.urun_ekle(url_on=url, ad_on=ad)
+            return
+
+        # toplu seçim: diyalogsuz doğrudan ekle
+        mevcut_url = {u.get("url") for u in self.ayar.get("urunler", [])}
+        mevcut_ad = {u.get("ad") for u in self.ayar.get("urunler", [])}
+        eklenen = atlanan = 0
+        for iid in secim:
+            url = self.paz_url_harita.get(iid, "")
+            deger = self.paz_agac.item(iid, "values") or ()
+            ad = deger[1] if len(deger) > 1 else ""
+            site = deger[0] if len(deger) > 0 else ""
+            if not url or url in mevcut_url or not ad:
+                atlanan += 1
+                continue
+            if ad in mevcut_ad:
+                ad = f"{ad} ({site})"
+            if ad in mevcut_ad:
+                atlanan += 1
+                continue
+            self.ayar.setdefault("urunler", []).append(
+                {"ad": ad, "url": url, "selector": "", "not": ""})
+            mevcut_url.add(url)
+            mevcut_ad.add(ad)
+            eklenen += 1
+        if eklenen:
+            self._config_kaydet()
+            self.liste_doldur()
+        ozet = f"＋ {eklenen} ürün takip listesine eklendi"
+        if atlanan:
+            ozet += f", {atlanan} atlandı (ekli/tekrar)"
+        self.konsol_yaz(ozet + ".")
+        self.durum_deg.set(f"Takibe alındı: {eklenen} ürün")
 
     def paz_temizle(self):
         self.paz_agac.delete(*self.paz_agac.get_children())
@@ -2901,6 +3028,20 @@ class Uygulama(tk.Tk):
         self.ithalat_geri_btn.pack(side=LEFT, padx=4)
         self._ipucu(self.ithalat_geri_btn,
                     "Bir önceki görüntüye döner (arama ↔ detay).")
+        self.ithalat_onceki_btn = ttk.Button(
+            ust, text="⬅ Önceki Sayfa",
+            command=lambda: self.ithalat_sayfa_git(-1), state="disabled")
+        self.ithalat_onceki_btn.pack(side=LEFT, padx=(8, 4))
+        self.ithalat_sonraki_btn = ttk.Button(
+            ust, text="Sonraki Sayfa ➡",
+            command=lambda: self.ithalat_sayfa_git(1), state="disabled")
+        self.ithalat_sonraki_btn.pack(side=LEFT, padx=4)
+        self._ipucu(self.ithalat_onceki_btn,
+                    "Aramanın bir önceki sayfasına gider "
+                    "(her sayfa 1 sorgu hakkı harcar).")
+        self._ipucu(self.ithalat_sonraki_btn,
+                    "Aramanın sonraki sayfasına gider "
+                    "(her sayfa 1 sorgu hakkı harcar).")
         self._ipucu(ttk.Button(ust, text="📄 CSV Aktar",
                                command=lambda: self._csv_aktar("ithalat")),
                     "Listeyi CSV olarak indirir."
@@ -2940,6 +3081,9 @@ class Uygulama(tk.Tk):
         self.ithalat_url_harita: dict[str, str] = {}
         self.ithalat_suriyor = False
         self.ithalat_surec = None
+        self.ithalat_arama_sorgu = ""
+        self.ithalat_sayfa_no = 1
+        self.ithalat_toplam_sayfa = 1
         self._ithalat_kolonlari_kur("arama")
 
     ITHALAT_KOLONLAR = {
@@ -2968,6 +3112,8 @@ class Uygulama(tk.Tk):
             return
         if not self._hak_tuket("İthalat Radarı"):
             return
+        self.ithalat_arama_sorgu = sorgu
+        self.ithalat_sayfa_no = 1
         if self.ithalat_veri:
             self.ithalat_gecmis.append((self.ithalat_mod, self.ithalat_veri))
             del self.ithalat_gecmis[:-20]
@@ -2975,6 +3121,43 @@ class Uygulama(tk.Tk):
             ["ara", sorgu, "--sayfa", "1"],
             lambda v: self._ithalat_goster("arama", v),
             f"🌍 '{sorgu}' aranıyor…")
+
+    def ithalat_sayfa_git(self, kaydir: int) -> None:
+        """Arama sonuçlarında bir önceki/sonraki sayfaya geçer."""
+        if self.ithalat_suriyor:
+            return
+        if self.ithalat_mod != "arama" or not self.ithalat_arama_sorgu:
+            return
+        yeni = self.ithalat_sayfa_no + kaydir
+        if yeni < 1 or yeni > self.ithalat_toplam_sayfa:
+            return
+        if not self._hak_tuket("İthalat Radarı (sayfa)"):
+            return
+        if self.ithalat_veri:
+            self.ithalat_gecmis.append((self.ithalat_mod, self.ithalat_veri))
+            del self.ithalat_gecmis[:-20]
+        sorgu = self.ithalat_arama_sorgu
+        self.ithalat_sayfa_no = yeni
+        self._ithalat_calistir(
+            ["ara", sorgu, "--sayfa", str(yeni)],
+            lambda v: self._ithalat_goster("arama", v),
+            f"🌍 '{sorgu}' sayfa {yeni} yükleniyor…")
+        self._ithalat_sayfa_guncelle()
+
+    def _ithalat_sayfa_guncelle(self) -> None:
+        """Sayfa butonlarını duruma göre açar/kapatır."""
+        if not hasattr(self, "ithalat_sonraki_btn"):
+            return
+        hazir = (not self.ithalat_suriyor
+                 and self.ithalat_mod == "arama"
+                 and self.ithalat_toplam_sayfa > 1)
+        self.ithalat_onceki_btn.state(
+            ["!disabled"] if hazir and self.ithalat_sayfa_no > 1
+            else ["disabled"])
+        self.ithalat_sonraki_btn.state(
+            ["!disabled"] if hazir
+            and self.ithalat_sayfa_no < self.ithalat_toplam_sayfa
+            else ["disabled"])
 
     def ithalat_git(self, url: str):
         if not url:
@@ -3042,6 +3225,7 @@ class Uygulama(tk.Tk):
         self.ithalat_ara_btn.state(["disabled"])
         self._ithalat_geri_guncelle()
         self.ithalat_geri_btn.state(["disabled"])
+        self._ithalat_sayfa_guncelle()
         self.ithalat_ozet.set(bekleme)
         self.konsol_yaz(bekleme)
         self.durum_deg.set(bekleme)
@@ -3054,7 +3238,8 @@ class Uygulama(tk.Tk):
             kod = -1
             hata = None
             try:
-                ortam = dict(os.environ, PYTHONIOENCODING="utf-8")
+                ortam = dict(os.environ, PYTHONIOENCODING="utf-8",
+                             RIYA_IC="1")
                 surec = subprocess.Popen(
                     komut, cwd=str(kok), stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT, text=True, encoding="utf-8",
@@ -3086,6 +3271,7 @@ class Uygulama(tk.Tk):
         self.ithalat_suriyor = False
         self.ithalat_ara_btn.state(["!disabled"])
         self._ithalat_geri_guncelle()
+        self._ithalat_sayfa_guncelle()
         try:
             self.ilerleme.stop()
             self.ilerleme.configure(mode="determinate")
@@ -3112,6 +3298,8 @@ class Uygulama(tk.Tk):
         self.ithalat_url_harita.clear()
 
         if mod == "arama":
+            self.ithalat_sayfa_no = int(veri.get("sayfa", 1) or 1)
+            self.ithalat_toplam_sayfa = int(veri.get("toplam_sayfa", 1) or 1)
             for s in veri.get("sonuclar", []):
                 iid = self.ithalat_agac.insert(
                     "", END, values=(s.get("tur"), s.get("ad"),
@@ -3152,6 +3340,7 @@ class Uygulama(tk.Tk):
 
         self.ithalat_ozet.set(ozet)
         self.durum_deg.set(durum)
+        self._ithalat_sayfa_guncelle()
         self.ust_sayfa.select(self.ithalat_sayfa)
 
     # ------------------------------------------------------------------
@@ -3191,12 +3380,17 @@ class Uygulama(tk.Tk):
     # ------------------------------------------------------------------
     #  Geçmiş / grafik
     # ------------------------------------------------------------------
+    def _gecmis_gun(self) -> int:
+        """Dönem kutusundaki seçime göre gün sayısı."""
+        return {"7 gün": 7, "30 gün": 30, "90 gün": 90,
+                "1 yıl": 365}.get(self.gecmis_donem.get(), 3650)
+
     def gecmis_yenile(self):
         ad = self.secili_urun()
         self.gecmis_agac.delete(*self.gecmis_agac.get_children())
         if not ad:
             return
-        satirlar = cekirdek.fiyat_gecmisi(ad, gun=3650)
+        satirlar = cekirdek.fiyat_gecmisi(ad, gun=self._gecmis_gun())
         for zaman, fiyat, para in satirlar:
             self.gecmis_agac.insert("", END, values=(
                 zaman, cekirdek.fiyat_bicimle(fiyat, para or "")))
@@ -3216,7 +3410,8 @@ class Uygulama(tk.Tk):
                       foreground=RENKLER["gri"]).pack(expand=True)
             return
 
-        satirlar = [s for s in cekirdek.fiyat_gecmisi(ad, gun=3650)
+        satirlar = [s for s in cekirdek.fiyat_gecmisi(ad,
+                                                      gun=self._gecmis_gun())
                     if s[1] is not None]
         if len(satirlar) < 2:
             ttk.Label(self.grafik_uyesi,
@@ -3409,6 +3604,11 @@ class Uygulama(tk.Tk):
         self._url_ac(u["url"])
 
     def _url_ac(self, url: str):
+        if not str(url).startswith(("http://", "https://")):
+            messagebox.showwarning("Açılamadı",
+                                   "Yalnızca http/https bağlantıları "
+                                   "açılabilir.")
+            return
         try:
             if sys.platform.startswith("win"):
                 os.startfile(url)           # type: ignore[attr-defined]

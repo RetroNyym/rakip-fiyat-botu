@@ -16,11 +16,14 @@ Tüm fonksiyonlar `log=` parametresi alır; GUI bu sayede çıktıyı
 konsol yerine arayüze yönlendirebilir.
 
 CLI:
-  python rakip_takip.py                  # tarama yap
+  python rakip_takip.py                  # tarama yap (1 deneme hakkı)
   python rakip_takip.py --rapor          # fiyat geçmişini göster
   python rakip_takip.py --inspect URL    # CSS seçici bulmaya yardımcı olur
   python rakip_takip.py --test           # Telegram bağlantısını dener
+  python rakip_takip.py --lisans RN1-…   # lisans anahtarını gir ve kaydet
   python rakip_takip.py --config baska.json
+
+Çıkış kodları: 0 başarılı · 1 config/anahtar hatası · 4 lisans/deneme hakkı yok
 
 GUI:
   python gui.py
@@ -30,13 +33,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sqlite3
 import sys
 import time
 from datetime import datetime, timedelta
+from html import escape as html_escape
 from pathlib import Path
 from typing import Callable, Optional
+
+import lisans
 from urllib import robotparser
 from urllib.parse import urljoin, urlparse
 
@@ -46,6 +53,14 @@ try:
 except ImportError:
     print("Eksik paketler. Lütfen çalıştırın:\n  pip install -r requirements.txt")
     sys.exit(1)
+
+# Windows konsolu (cp1252/cp1254) ▲▼ gibi glifleri yazamaz → tarama
+# "hata" ile biter. Çıktıyı UTF-8'e al (radar modülleri de aynısını yapar).
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:                                       # noqa: BLE001
+    pass
 
 KOK = Path(__file__).resolve().parent
 VARSAYILAN_CONFIG = KOK / "config.json"
@@ -343,7 +358,13 @@ def tum_ucretler(db_yol: Path | None = None) -> list[tuple]:
 # Telegram
 # --------------------------------------------------------------------------
 def telegram_gonder(ayar: dict, mesaj: str,
-                    log: Optional[LogFn] = None) -> bool:
+                    log: Optional[LogFn] = None,
+                    butonlar: Optional[list[tuple[str, str]]] = None
+                    ) -> bool:
+    """Telegram'a mesaj gönderir; ``butonlar`` verilirse link butonu ekler.
+
+    butonlar: [(buton metni, http/https url), …] — en fazla 5 adet.
+    """
     log = _log_al(log)
     if str(ayar.get("bildirim") or "").lower() == "konsol":
         # Arayüzde "Sadece Konsol" seçildi → Telegram'a gönderme.
@@ -352,10 +373,17 @@ def telegram_gonder(ayar: dict, mesaj: str,
     chat_id = (ayar.get("telegram_chat_id") or "").strip()
     if not token or not chat_id:
         return False
+    veri = {"chat_id": chat_id, "text": mesaj, "parse_mode": "HTML"}
+    if butonlar:
+        satirlar = [[{"text": f"🔗 {metin[:40]}", "url": url}]
+                    for metin, url in butonlar[:5]
+                    if str(url).startswith(("http://", "https://"))]
+        if satirlar:
+            veri["reply_markup"] = {"inline_keyboard": satirlar}
     try:
         requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
-            json={"chat_id": chat_id, "text": mesaj, "parse_mode": "HTML"},
+            json=veri,
             timeout=20,
         )
         return True
@@ -568,6 +596,7 @@ def tarama_yap(config: dict,
     oturum = oturum_ac()
     bag = db_ac(db_yol)
     uyari_satirlari: list[str] = []
+    uyari_butonlari: list[tuple[str, str]] = []
     toplam = len(urunler)
 
     log(f"\n{toplam} ürün taranıyor...\n")
@@ -606,8 +635,8 @@ def tarama_yap(config: dict,
                 kayit["mesaj"] = "robots.txt izin vermiyor"
                 continue
 
-            html = sayfayi_cekir(url, oturum, bekleme, log)
-            corba = BeautifulSoup(html, "html.parser")
+            sayfa_html = sayfayi_cekir(url, oturum, bekleme, log)
+            corba = BeautifulSoup(sayfa_html, "html.parser")
             fiyat, para, ham = seciciden_fiyat_bul(corba, secici)
 
             if fiyat is None:
@@ -645,10 +674,12 @@ def tarama_yap(config: dict,
 
                 if esik <= 0 or abs(yuzde) >= esik:
                     uyari_satirlari.append(
-                        f"<b>{ok} {ad}</b>\n"
+                        f"<b>{ok} {html_escape(ad)}</b>\n"
                         f"{fiyat_bicimle(onceki, para)} → {fiyat_bicimle(fiyat, para)} "
                         f"({yuzde:+.1f}%)\n{url}"
                     )
+                    if str(url).startswith(("http://", "https://")):
+                        uyari_butonlari.append((ad, url))
 
         except Exception as hata:
             log(f"  [!] Hata: {hata}")
@@ -670,7 +701,7 @@ def tarama_yap(config: dict,
             if str(ayar.get("bildirim") or "").lower() == "konsol":
                 log("🔕 Telegram kapalı (Sadece Konsol) — değişiklikler "
                     "konsol ve raporda.")
-            elif telegram_gonder(ayar, mesaj, log):
+            elif telegram_gonder(ayar, mesaj, log, butonlar=uyari_butonlari):
                 log(f"✅ {len(degisen)} değişiklik Telegram'a gönderildi.")
             else:
                 log("⚠️ Değişiklikler var ama Telegram ayarlanmamış "
@@ -799,13 +830,46 @@ def test_telegram(config: dict, log: Optional[LogFn] = None) -> bool:
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
+CIKIS_LISANS = 4          # deneme hakkı doldu / lisans gerekli
+
+
+def _hak_al(config: dict, islem: str) -> bool:
+    """CLI için deneme hakkı harcar; lisanslıysa/test/iç çağrıda ödemez.
+
+    GUI'deki ``_hak_tuket`` ile aynı kural: işlem başına 1 hak. Hak bittiyse
+    ``False`` döner; çağıran ``CIKIS_LISANS`` ile çıkar.
+    """
+    if lisans.test_mi() or lisans.ic_cagri():
+        return True
+    if lisans.anahtar_gecerli(config.get("lisans") or ""):
+        return True
+    if lisans.hak_tuket():
+        kalan = lisans.hak_kalan()
+        print(f"🎫 Deneme hakkı kullanıldı ({islem}) — kalan {kalan} hak.")
+        if kalan == 0:
+            print("[!] Sonraki işlem için lisans anahtarı gerekir: "
+                  "python rakip_takip.py --lisans ANAHTAR")
+        return True
+    print(f"⛔ Deneme hakkınız doldu ({lisans.HAK_SINIRI} sorgu) — "
+          f"“{islem}” işlemi durduruldu.")
+    print("   Lisans anahtarıyla açmak için:\n"
+          "     python rakip_takip.py --lisans RN1-…")
+    return False
+
+
 def main() -> None:
-    p = argparse.ArgumentParser(description="Rakip fiyat takip botu")
+    p = argparse.ArgumentParser(
+        description="Rakip fiyat takip botu",
+        epilog=f"Çıkış kodları: 0 başarılı · 1 config/anahtar hatası · "
+               f"{CIKIS_LISANS} lisans/deneme hakkı yok")
     p.add_argument("--config", default=str(VARSAYILAN_CONFIG))
     p.add_argument("--rapor", action="store_true", help="Fiyat geçmişini göster")
     p.add_argument("--inspect", metavar="URL", help="CSS seçici bul")
     p.add_argument("--test", action="store_true", help="Telegram testi")
     p.add_argument("--gun", type=int, default=30, help="Rapor gün aralığı")
+    p.add_argument("--lisans", metavar="ANAHTAR",
+                   help="Lisans anahtarını doğrula ve config'e kaydet "
+                        "(RN1-…)")
     args = p.parse_args()
 
     try:
@@ -817,13 +881,32 @@ def main() -> None:
         print(f"Config okunamadı (JSON hatası): {hata}")
         sys.exit(1)
 
+    if args.lisans is not None:
+        anahtar = args.lisans.strip()
+        if not lisans.anahtar_gecerli(anahtar):
+            print("✖ Geçersiz lisans anahtarı.")
+            sys.exit(1)
+        config["lisans"] = anahtar
+        try:
+            config_kaydet(config, args.config)
+        except OSError as hata:
+            print(f"Config kaydedilemedi: {hata}")
+            sys.exit(1)
+        print("✔ Lisans doğrulandı ve kaydedildi — tüm özellikler açık.")
+        if not (args.rapor or args.inspect or args.test):
+            return
+
     if args.inspect:
+        if not _hak_al(config, "Seçici Bul"):
+            sys.exit(CIKIS_LISANS)
         secici_bul(args.inspect)
     elif args.rapor:
         rapor_yazdir(config, args.gun)
     elif args.test:
         test_telegram(config)
     else:
+        if not _hak_al(config, "Tarama"):
+            sys.exit(CIKIS_LISANS)
         tarama_yap(config)
 
 

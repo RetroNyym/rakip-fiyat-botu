@@ -14,6 +14,7 @@ import json
 import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # Açılış ipucu balonu testlerde açılmasın
 os.environ["RIYA_TESTI"] = "1"
@@ -108,11 +109,13 @@ class GuiTesti(unittest.TestCase):
         bag.close()
 
     def setUp(self):
-        """Her test öncesi uygulamayı fabrika ayarına döndür."""
+        """Her test öncesi uygulamayı fabrika ayarına döndürür."""
         self.app = self.__class__.app
         self.app.ayar = cekirdek.config_oku(self.config_yol)
         self.app.arama_deg.set("")
         self.app.son_tarama = []
+        self.app.sadece_degisen.set(False)
+        self.app.gecmis_donem.set("Tümü")
         self.app.liste_doldur()
         self.app.sonuclari_temizle()
         self.app.konsol_temizle()
@@ -290,6 +293,110 @@ class GuiTesti(unittest.TestCase):
         """durum_metni sözlüğünde olmayan bir durum çökmemeli."""
         self.app.sonuclari_doldur([{"ad": "D", "durum": "garip", "mesaj": ""}])
         self.assertEqual(len(self.app.sonuc_agac.get_children()), 1)
+
+    # ------------------------------------------------------------------
+    #  v2.7: sıralama / filtre / dönem / güvenlik / toplu ekleme
+    # ------------------------------------------------------------------
+    def test_sonuc_sirala_artan_azalan(self):
+        karisik = [
+            {"ad": "B", "fiyat": 50.0, "onceki": None, "yuzde": -10.0,
+             "durum": "degisti", "mesaj": "▼", "para": "TL"},
+            {"ad": "A", "fiyat": 100.0, "onceki": 90.0, "yuzde": 10.0,
+             "durum": "degismedi", "mesaj": "x", "para": "TL"},
+            {"ad": "C", "fiyat": None, "onceki": None, "yuzde": None,
+             "durum": "bulunamadi", "mesaj": "-", "para": ""},
+        ]
+        self.app.son_tarama = karisik
+        self.app._sonuc_yon = {}
+        self.app._sonuc_sirala("yuzde")              # ilk tık: artan
+        self.assertEqual([s["ad"] for s in self.app.son_tarama],
+                         ["B", "A", "C"])
+        self.app._sonuc_sirala("yuzde")              # ikinci: azalan
+        self.assertEqual([s["ad"] for s in self.app.son_tarama],
+                         ["A", "B", "C"])
+        self.assertEqual(len(self.app.sonuc_agac.get_children()), 3)
+
+    def test_sadece_degisen_filtresi(self):
+        try:
+            self.app.sadece_degisen.set(True)
+            self.app.sonuclari_doldur(ORNEK_SONUCLAR)
+            cocuk = self.app.sonuc_agac.get_children()
+            self.assertEqual(len(cocuk), 1)
+            self.assertIn("Değişti",
+                          self.app.sonuc_agac.item(cocuk[0], "values")[4])
+        finally:
+            self.app.sadece_degisen.set(False)
+
+    def test_gecmis_donem_secimi(self):
+        for secim, beklenen in (("7 gün", 7), ("30 gün", 30),
+                                ("90 gün", 90), ("1 yıl", 365),
+                                ("Tümü", 3650), ("bilinmeyen", 3650)):
+            self.app.gecmis_donem.set(secim)
+            self.assertEqual(self.app._gecmis_gun(), beklenen, secim)
+
+    def test_url_ac_sadece_http(self):
+        with mock.patch.object(gui.sys, "platform", "win32"), \
+                mock.patch.object(gui.os, "startfile",
+                                  create=True) as startfile, \
+                mock.patch.object(gui, "messagebox") as kutu:
+            self.app._url_ac("javascript:alert(1)")
+            startfile.assert_not_called()
+            kutu.showwarning.assert_called_once()
+            self.app._url_ac("https://ornek.com/urun")
+            startfile.assert_called_once_with("https://ornek.com/urun")
+
+    def test_paz_takibe_al_toplu(self):
+        self.app.paz_agac.delete(*self.app.paz_agac.get_children())
+        i1 = self.app.paz_agac.insert(
+            "", "end", values=("SiteA", "V2.7 Toplu Ürün 1", "10,00 TL",
+                               "sat", "3", "https://ornek.com/1"))
+        i2 = self.app.paz_agac.insert(
+            "", "end", values=("SiteB", "V2.7 Toplu Ürün 2", "20,00 TL",
+                               "sat", "1", "https://ornek.com/2"))
+        self.app.paz_url_harita = {i1: "https://ornek.com/1",
+                                   i2: "https://ornek.com/2"}
+        self.app.paz_agac.selection_set([i1, i2])
+        onceden = len(self.app.ayar.get("urunler", []))
+        try:
+            with mock.patch.object(self.app, "_config_kaydet"), \
+                    mock.patch.object(self.app, "urun_ekle") as diyalog:
+                self.app.paz_takibe_al()
+            diyalog.assert_not_called()          # toplu modda pencere açılmaz
+            self.assertEqual(len(self.app.ayar["urunler"]), onceden + 2)
+            eklenen = self.app.ayar["urunler"][onceden:]
+            self.assertEqual({u["url"] for u in eklenen},
+                             {"https://ornek.com/1", "https://ornek.com/2"})
+        finally:
+            self.app.paz_temizle()
+
+    def test_ithalat_sayfa_git(self):
+        eski = (self.app.ithalat_gecmis, self.app.ithalat_arama_sorgu,
+                self.app.ithalat_sayfa_no, self.app.ithalat_toplam_sayfa)
+        self.app.ithalat_suriyor = False
+        self.app.ithalat_mod = "arama"
+        self.app.ithalat_arama_sorgu = "nike"
+        self.app.ithalat_sayfa_no = 2
+        self.app.ithalat_toplam_sayfa = 3
+        self.app.ithalat_veri = None
+        self.app.ithalat_gecmis = []
+        try:
+            with mock.patch.object(self.app, "_hak_tuket",
+                                   return_value=True), \
+                    mock.patch.object(self.app,
+                                      "_ithalat_calistir") as calistir:
+                self.app.ithalat_sayfa_git(1)
+                self.assertEqual(calistir.call_args[0][0],
+                                 ["ara", "nike", "--sayfa", "3"])
+                calistir.reset_mock()
+                self.app.ithalat_sayfa_git(1)     # 3/3 → sınır, çağrı yok
+                calistir.assert_not_called()
+                self.app.ithalat_sayfa_git(-1)
+                self.assertEqual(calistir.call_args[0][0],
+                                 ["ara", "nike", "--sayfa", "2"])
+        finally:
+            (self.app.ithalat_gecmis, self.app.ithalat_arama_sorgu,
+             self.app.ithalat_sayfa_no,
+             self.app.ithalat_toplam_sayfa) = eski
 
     def test_tarama_durdur_kapaliyken(self):
         self.assertFalse(self.app.tarama_suriyor)

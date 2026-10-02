@@ -39,6 +39,26 @@ python gui.py
 baslat.bat
 ```
 
+### Lisans ve deneme hakkı
+
+Programı **5 sorgu hakkı** ile ücretsiz denersiniz: tarama, ürün arama ve
+ithalat radarı her biri **1 hak** harcar. Hem arayüzde hem komut satırında
+ortaktır.
+
+Haklar iki ayrı yerde saklanır (`data/limit.json` ve uygulama verisi
+klasörünüzdeki ikinci kopya); tek bir dosyanın silinmesi sayacı sıfırlamaz.
+
+| | |
+|---|---|
+| Arayüzden girme | **Araçlar → Lisans…** |
+| Komut satırından girme | `python rakip_takip.py --lisans RN1-…` |
+| Saklama yeri | `config.json` → `"lisans"` alanı (bir daha sormaz) |
+| Hak bittiğinde | Arayüzde kilit penceresi; CLI'da **çıkış kodu 4** |
+| Geçersiz anahtar | CLI'da **çıkış kodu 1** |
+
+Zamanlanmış tarama (`tarama.bat`) da her çalıştırmada 1 hak harcar —
+deneme süresince günde bir kez çalıştırırsanız 5 gün kullanabilirsiniz.
+
 ---
 
 ## 2. Arayüz Rehberi (`gui.py`)
@@ -47,12 +67,13 @@ baslat.bat
 ┌──────────────────────────────────────────────────────────────────────┐
 │ ▶ Tarama Başlat  ▶ Seçiliyi Tara  ■ Durdur │ + Ürün Ekle  ✎ ✗ │ 🔍 Seçici Bul  📊 Rapor  🖼 Görsel Getir  ⚙ │
 ├────────────┬─────────────────────────────────────────────────────────┤
-│ 🔍 [arama] │  Tarama Sonuçları │ Fiyat Geçmişi │ Rapor              │
-│            │  ┌───────────────────────────────────────────────────┐ │
+│ 🔍 [arama] │ Tarama Sonuçları│Fiyat Geçmişi│Rapor│🖼│🏆│🔍│🌍 (7 sekme)│
+│ [sayfa 1▾] │  ┌───────────────────────────────────────────────────┐ │
 │ Ürün listesi│  │ tablo: önceki → yeni, değişim %, durum, mesaj    │ │
-│ (çift      │  └───────────────────────────────────────────────────┘ │
-│  tıkla =   │  [geçmiş tablosu]      [fiyat grafiği]                │
-│  düzenle)  │                                                       │
+│ (çift      │  │ ↑↓ başlık = sırala · ☑ Sadece değişenler         │ │
+│  tıkla =   │  │ İthalat: ⬅ Önceki / Sonraki ➡ sayfa butonları    │ │
+│  düzenle)  │  └───────────────────────────────────────────────────┘ │
+│            │  [dönem ▾] [geçmiş tablosu]     [fiyat grafiği]        │
 ├────────────┴─────────────────────────────────────────────────────────┤
 │ 📟 Konsol  │  🖼 Ürün Görseli   ← görseli burada görürsün           │
 ├──────────────────────────────────────────────────────────────────────┤
@@ -75,6 +96,11 @@ baslat.bat
 | Rakip ürününün görselini gör | Ürünü seç → `🖼 Görsel Getir` → `Ürün Görseli` sekmesi |
 | Telegram'ı dene | `⚙ Ayarlar` → token/chat_id gir → `Araçlar → Telegram Testi` |
 | Veriyi Excel'e aktar | `Dosya → ... CSV Aktar` (UTF-8 BOM, Excel'de Türkçe karakterler bozulmaz) |
+| Sonuç tablosunu sırala | Tarama Sonuçları'nda **sütun başlığına tıkla** (▲ artan / ▼ azalan) |
+| Sadece değişenleri gör | **☑ Sadece değişenler** onay kutusu (tablo anında süzülür) |
+| Birçok sonucu toplu takibe al | Sonuçları seç (Ctrl+sol tık) → **＋ Takibe Al** (tekrarlar atlanır) |
+| İthalat'ta sayfa değiştir | **⬅ Önceki / Sonraki ➡** butonları (her sayfa 1 deneme hakkı) |
+| Geçmişi daralt | Fiyat Geçmişi sekmesinde **Dönem**: 7 gün / 30 / 90 / 1 yıl / Tümü |
 
 ### Klavye kısayolları
 
@@ -278,9 +304,10 @@ pytest -q                           # isteğe bağlı
 
 - Testler **internete çıkmaz**; yerel bir HTTP sunucusu kurup sayfayı
   oradan okur. Bu yüzden `--config` dosyana dokunmadan koşar.
-- 97 test: fiyat ayrıştırma, config (BOM), SQLite, robots.txt, tarama
-  akışı (ilk/değişti/değişmedi), Telegram, arayüz, CLI ve "Seçici Bul"
-  penceresinin uçtan uca akışı.
+- 198 test: fiyat ayrıştırma, config (BOM), SQLite, robots.txt, tarama
+  akışı (ilk/değişti/değişmedi), Telegram (butonlu uyarı mesajı), lisans
+  (Ed25519 + deneme sayacı + CLI kilidi), arayüz (sıralama, filtre, dönem,
+  sayfa gezinme), CLI ve "Seçici Bul" penceresinin uçtan uca akışı.
 - GitHub'a her push'ta aynı testler `.github/workflows/test.yml` ile
   Windows ve Linux üzerinde otomatik koşar.
 

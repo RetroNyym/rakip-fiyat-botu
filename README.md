@@ -18,15 +18,16 @@
 |---|---|
 | 🔍 **Tarama** | `config.json`'daki rakip ürün sayfalarını gezer, fiyatı çeker |
 | 🔍 **Ürün Arama** | Ürün adını Trendyol · Hepsiburada · N11 · Amazon'da toplu arar, fiyatları karşılaştırır |
-| 📈 **Geçmiş** | Her günün fiyatını SQLite'a yazar → geçmiş + grafik oluşur |
-| 🔔 **Uyarı** | Fiyat değişince Telegram'a mesaj atar |
+| 📈 **Geçmiş** | Her günün fiyatını SQLite'a yazar → geçmiş + grafik oluşur (dönem: 7 gün – Tümü) |
+| 🗂 **Sonuçlar** | Kolon başlığıyla sıralama, "sadece değişenler" filtresi |
+| 🔔 **Uyarı** | Fiyat değişince Telegram'a mesaj atar — mesajda ürüne giden 🔗 butonu |
 | 🧭 **Rakip Radar** | Pazaryerlerinde satıcı listesi: pazar payı, yorum, tahmini ciro + lider tablosu |
 | 🌍 **İthalat Radarı** | Rakibinin tedarikçilerini ABD ithalat kayıtlarından (ImportYeti) keşfeder |
 | 🧭 **Seçici bul** | Fiyatın CSS seçicisini sayfadan otomatik keşfeder |
 | 🖼 **Görsel** | Rakip ürününün görselini arayüzde gösterir |
 | 📊 **Rapor** | En düşük / en yüksek / toplam değişim / dalgalanma aralığı |
 | 📄 **CSV** | Liste, sonuç, rapor ve geçmişi Excel uyumlu CSV olarak aktarır |
-| 🔑 **Lisans** | Deneme modu: 5 sorgu hakkı (Ürün Arama + Tarama + İthalat); sınırda lisans anahtarıyla kilit ekranı |
+| 🔑 **Lisans** | Deneme modu: 5 sorgu hakkı (Ürün Arama + Tarama + İthalat); sınırda lisans anahtarıyla kilit ekranı. Asimetrik (Ed25519) anahtar — kaynak kodu elde geçse de **yeni anahtar üretemez** |
 | ⏰ **Otomasyon** | Görev Zamanlayıcı'ya tek tıkla günlük tarama kurar |
 
 **Fiyat ayrıştırma** Türkçe ve uluslararası formatları ayırt eder:
@@ -66,7 +67,7 @@ cd rakip-fiyat-botu
 pip install -r requirements.txt
 ```
 
-**Temel (zorunlu):** `requests`, `beautifulsoup4`
+**Temel (zorunlu):** `requests`, `beautifulsoup4`, `cryptography`
 **Opsiyonel ama önerilir:** `Pillow` (görsel önizleme), `matplotlib` (grafik)
 
 ```bash
@@ -90,13 +91,22 @@ Veya Windows'ta `baslat.bat` dosyasına çift tıkla.
 ### Komut satırı / CLI
 
 ```bash
-python rakip_takip.py                  # tarama yap
+python rakip_takip.py                  # tarama yap (1 deneme hakkı)
 python rakip_takip.py --rapor          # fiyat geçmişini göster
 python rakip_takip.py --rapor --gun 90 # son 90 gün
 python rakip_takip.py --inspect URL    # CSS seçici bul
 python rakip_takip.py --test           # Telegram bağlantısını dene
+python rakip_takip.py --lisans RN1-…   # lisans anahtarını gir ve kaydet
 python rakip_takip.py --config baska.json
 ```
+
+**Çıkış kodları:** `0` başarılı · `1` config / geçersiz anahtar ·
+`4` deneme hakkı doldu (lisans gerekli).
+
+> Deneme hakkı hem GUI'de hem CLI'da **ortaktır**: her tarama / ürün arama /
+> ithalat sorgusu 1 hak harcar. Hak sayacı `data/limit.json` **ve**
+> `%APPDATA%\RakipFiyatBot\limit.json` içinde tutulur — dosyalardan biri
+> silinse diğeri sayacı taşır.
 
 ### Zamanlanmış günlük tarama / Scheduled daily run
 
@@ -140,7 +150,7 @@ python rakip_takip.py --config baska.json
 | `esik_yuzde` | `0` = her değişimde uyar. `5` = %5 üstü değişimlerde uyar |
 | `telegram_token` | @BotFather'dan alınan bot token'ı |
 | `telegram_chat_id` | @userinfobot'a yazarak aldığın chat ID |
-| `lisans` | Lisans anahtarı (`RN1-…`). Geçerliyse deneme hakkı sınırı kalkar; **Araçlar → Lisans…** ile girilir |
+| `lisans` | Lisans anahtarı (`RN1-…`). Geçerliyse deneme hakkı sınırı kalkar; **Araçlar → Lisans…** ile (GUI) veya `python rakip_takip.py --lisans RN1-…` (CLI) ile girilir |
 
 > CSS seçicisini bilmiyorsan arayüzde `🔍 Seçici Bul` butonu sayfayı tarayıp
 > aday listesi çıkarır; çift tıklayınca ürüne uygulanır.
@@ -153,17 +163,18 @@ python rakip_takip.py --config baska.json
 rakip-fiyat-botu/
 ├── gui.py            # Masaüstü arayüz (Tkinter)
 ├── rakip_takip.py    # Çekirdek: tarama, ayrıştırma, DB, Telegram, rapor
-├── lisans.py         # 🔑 Deneme hakkı (5 sorgu) + lisans anahtar doğrulama
-├── lisans_uret.py    # 🔑 Satıcı için lisans anahtarı üretir
+├── lisans.py         # 🔑 Deneme hakkı (5 sorgu) + Ed25519 anahtar DOĞRULAMA
+├── lisans_uret.py    # 🔑 Satıcı: anahtar ÜRETİR — dağıtım paketine girmez
+├── paketle.py        # 📦 Satıcı: dağıtılacak paketi üretir + denetler
 ├── config.json       # Ayarlar + rakip ürün listesi (git'e girmez)
 ├── config.ornek.json # Şablon — ilk açılışta config.json buna kopyalanır
 ├── requirements.txt  # Çalışma bağımlılıkları
 ├── requirements.gelistirme.txt  # Test/CI bağımlılıkları
-├── test_rakip_takip.py   # Çekirdek testleri (58 durum)
-├── test_gui.py           # Arayüz duman + regresyon testleri (39 durum)
+├── test_rakip_takip.py   # Çekirdek testleri (61 durum)
+├── test_gui.py           # Arayüz duman + regresyon testleri (45 durum)
 ├── test_urun_arama.py    # Ürün Arama modülü + sekmesi testleri (30 durum)
 ├── test_ithalat_radar.py # İthalat Radarı ayrıştırma testleri (18 durum)
-├── test_lisans.py        # Lisans + deneme hakkı testleri (18 durum)
+├── test_lisans.py        # Lisans + deneme hakkı + CLI kilidi (41 durum)
 ├── baslat.bat        # Arayüzü başlat (çift tık)
 ├── tarama.bat        # Zamanlanmış CLI taraması
 ├── pazaryeri-radar/  # 🏆 Rakip Radar modülü (satıcı toplama + rapor)
@@ -206,8 +217,8 @@ Ne kapsanıyor:
 | Arayüz | liste + canlı arama, seçim, geçmiş, grafik, rapor, CSV, konsol |
 | Ürün Arama | 9 site HTML örnekleriyle ayrıştırma + GUI sekmesi (ağsız) |
 | İthalat Radarı | HTML/JSON ayrıştırma örnek dosyalarla **ağsız** test edilir |
-| Lisans | anahtar HMAC doğrulama, 5 sorgu sınırı, sayaç tahrifi → kilit, GUI koruması |
-| CLI | `--help`, hata kodları, eksik config mesajı |
+| Lisans | Ed25519 imza doğrulama, 5 sorgu sınırı, aynalı sayaç, tahrif → kilit, GUI/CLI koruması |
+| CLI | `--help`, hata kodları, eksik config mesajı, `--lisans` aktivasyonu |
 
 CI (GitHub Actions) her push'ta **2 işletim sistemi × 3 Python sürümü**
 üzerinde hem `unittest` hem `pytest` ile koşar. Başsız ortamlarda arayüz
@@ -260,6 +271,43 @@ Türkçe ayrıntılı kılavuz: **[KULLANIM.md](KULLANIM.md)**
 - **Günde 1-2 kez** yeterli. Saniyede istek atma.
 - Çektiğin veriyi **kendi kararın için** kullan; rakibin içeriğini kopyalama.
 - Fiyat verisi **kamuya açık** bilgidir; sorumluluk kullanıcıya aittir.
+
+---
+
+## 🔐 Satıcı notları / Seller notes
+
+Bu bölüm ürünün **satışını yürüten** kişi içindir; müşterilere dağıtılırken
+`lisans_uret.py`, `paketle.py` ve `test_*.py` hariç tutulur.
+
+### Lisans anahtarı üretimi
+
+```powershell
+# 5 anahtar üretir, her birini ayrıca doğrular
+python lisans_uret.py 5
+
+# Eldeki bir anahtarı doğrula
+python lisans_uret.py --dogrula RN1-…
+```
+
+- Anahtar biçimi: `RN1-<8 hex gövde>-<103 karakter base32 Ed25519 imzası>`
+- İmza **asimetriktir**: `lisans_uret.py` içindeki özel anahtarla üretilir,
+  dağıtılan `lisans.py` yalnızca **genel anahtar** ile doğrular — tersinden
+  anahtar üretilemez.
+- ⚠️ `lisans_uret.py` **git'e girmez** (`.gitignore`'da) ve paketlere
+  konmaz. Repo public olduğu için dosya takipten çıkarılmıştır; unutursanız
+  `paketle.py` denetimi hatayı verir.
+
+### Dağıtım paketi
+
+```powershell
+python paketle.py --zip
+```
+
+`dist/rakip-fiyat-botu-<sürüm>/` klasörü ve `.zip` arşivi üretir.
+Denetim şunları kontrol eder: gizli değer sızıntısı (anahtar/token),
+`lisans_uret.py`'nin git takibinde olmaması, gerekli dosyaların paket
+içinde bulunması, hariç tutulanların (`config.json`, `fiyatlar.db`,
+`test_*.py`, `.git/`) dışarıda kalması.
 
 ---
 

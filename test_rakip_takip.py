@@ -350,6 +350,50 @@ class TelegramTesti(unittest.TestCase):
     def test_test_telegram_kapali(self):
         self.assertFalse(c.test_telegram({"ayarlar": {}}, sessiz))
 
+    def test_butonlu_mesaj_reply_markup(self):
+        """butonlar → inline_keyboard eklenir; https olmayanlar elenir."""
+        yakalanan = {}
+        orijinal = c.requests.post
+
+        def sahte_post(url, json=None, timeout=None):
+            yakalanan["json"] = json
+            return True
+
+        c.requests.post = sahte_post
+        try:
+            ok = c.telegram_gonder(
+                {"bildirim": "telegram", "telegram_token": "1:t",
+                 "telegram_chat_id": "42"},
+                "merhaba", sessiz,
+                butonlar=[("Ürün A", "https://a.com/x"),
+                          ("Yok", "javascript:alert(1)")])
+        finally:
+            c.requests.post = orijinal
+        self.assertTrue(ok)
+        klavye = yakalanan["json"]["reply_markup"]["inline_keyboard"]
+        self.assertEqual(len(klavye), 1, "https olmayan buton elenmeli")
+        self.assertEqual(klavye[0][0]["url"], "https://a.com/x")
+        self.assertTrue(klavye[0][0]["text"].startswith("🔗"))
+
+    def test_butonsuz_mesajda_reply_markup_yok(self):
+        """buton yokken reply_markup alanı hiç gönderilmemeli."""
+        yakalanan = {}
+        orijinal = c.requests.post
+
+        def sahte_post(url, json=None, timeout=None):
+            yakalanan["json"] = json
+            return True
+
+        c.requests.post = sahte_post
+        try:
+            c.telegram_gonder(
+                {"bildirim": "telegram", "telegram_token": "1:t",
+                 "telegram_chat_id": "42"},
+                "merhaba", sessiz, butonlar=[])
+        finally:
+            c.requests.post = orijinal
+        self.assertNotIn("reply_markup", yakalanan["json"])
+
 
 # ==========================================================================
 #  6. Tarama (yerel sunucu — gerçek HTTP)
@@ -427,7 +471,7 @@ class TaramaTesti(unittest.TestCase):
         gonderilen = []
         orijinal = c.telegram_gonder
 
-        def sahte(ayar, mesaj, log=None):
+        def sahte(ayar, mesaj, log=None, **_ek):
             gonderilen.append(mesaj)
             return True
 
@@ -456,6 +500,28 @@ class TaramaTesti(unittest.TestCase):
         sonuc = self.tara()
         self.assertEqual(sonuc["durum"], "bulunamadi")
         self.assertEqual(sonuc["mesaj"], "Fiyat bulunamadı")
+
+    def test_urun_adi_html_kacirilir(self):
+        """< içeren ürün adı Telegram mesajında kaçırılır (HTML injection)."""
+        gonderilen = []
+        orijinal = c.telegram_gonder
+
+        def sahte(ayar, mesaj, log=None, **_ek):
+            gonderilen.append(mesaj)
+            return True
+
+        c.telegram_gonder = sahte
+        try:
+            self.config["urunler"][0]["ad"] = "<b>hack</b> Ürün"
+            self.sayfa_yaz("1.000,00 TL")
+            c.tarama_yap(self.config, log=sessiz, db_yol=self.db)
+            self.sayfa_yaz("950,00 TL")
+            c.tarama_yap(self.config, log=sessiz, db_yol=self.db)
+            self.assertEqual(len(gonderilen), 1)
+            self.assertIn("&lt;b&gt;hack&lt;/b&gt;", gonderilen[0])
+            self.assertNotIn("<b>hack</b> Ürün", gonderilen[0])
+        finally:
+            c.telegram_gonder = orijinal
 
     def test_url_eksik(self):
         self.config["urunler"][0]["url"] = ""
