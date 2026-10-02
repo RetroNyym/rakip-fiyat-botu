@@ -218,9 +218,115 @@ def arsivle(hedef_kok: Path, yol: Path) -> None:
                 arsiv.write(dosya, dosya.relative_to(hedef_kok.parent))
 
 
+# --------------------------------------------------------------------------
+#  .exe (PyInstaller) dağıtımı
+# --------------------------------------------------------------------------
+def exe_komutlari(py: str, dist: Path, calisma: Path) -> list[list[str]]:
+    """PyInstaller komut listeleri (GUI konsolsuz, CLI konsollu).
+
+    ``gui.py`` tek başına ``--kendini-sina`` ile de açılabilir: dondurulmuş
+    pakette gizli import eksikse (bs4/PIL/matplotlib…) orada düşer.
+    """
+    ortak = ["-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
+             "--log-level", "WARN", "--distpath", str(dist),
+             "--workpath", str(calisma), "--specpath", str(calisma)]
+    gizli = ["--hidden-import", "cryptography"]
+    return [
+        [py, *ortak, "--windowed", "--name", "RakipFiyatBot", *gizli,
+         str(KOK / "gui.py")],
+        [py, *ortak, "--console", "--name", "rakip-takip", *gizli,
+         str(KOK / "rakip_takip.py")],
+    ]
+
+
+def exe_uret(zip_dahil: bool, hizli: bool = False) -> None:
+    """İki .exe derler, yanına müşteri dosyalarını koyar, duman testi yapar."""
+    try:
+        import PyInstaller                                   # noqa: F401
+    except ImportError:
+        print("✖ PyInstaller yok → pip install -r requirements.gelistirme.txt")
+        sys.exit(2)
+
+    surum = surum_bul()
+    dist = KOK / "dist"
+    hedef = dist / f"rakip-fiyat-botu-{surum}-exe"
+    if hedef.exists():
+        shutil.rmtree(hedef)
+    hedef.mkdir(parents=True)
+    calisma = dist / ".exe-build"
+
+    for komut in exe_komutlari(sys.executable, hedef, calisma):
+        ad = komut[komut.index("--name") + 1]
+        print(f"▶ PyInstaller: {ad} …")
+        kod = subprocess.run(komut, cwd=str(KOK)).returncode
+        if kod != 0:
+            print(f"✗ {ad} derlemesi başarısız (çıkış {kod})")
+            sys.exit(1)
+
+    # Exe'nin yanında durması gerekenler (veri kökü = exe'nin klasörü)
+    for ad in ("config.ornek.json", "KULLANIM.md", "README.md", "LICENSE",
+               "baslat.bat"):
+        kaynak = KOK / ad
+        if kaynak.exists():
+            shutil.copy2(kaynak, hedef / ad)
+
+    # --- denetim ---
+    hatalar: list[str] = []
+    gui_exe = hedef / "RakipFiyatBot.exe"
+    cli_exe = hedef / "rakip-takip.exe"
+    for exe in (gui_exe, cli_exe):
+        if not exe.exists():
+            hatalar.append(f"üretilemedi: {exe.name}")
+        elif exe.stat().st_size < 5 * 1024 * 1024:
+            hatalar.append(f"şüpheli küçük: {exe.name} "
+                           f"({exe.stat().st_size // 1024} KB)")
+    if (hedef / "lisans_uret.py").exists():
+        hatalar.append("lisans_uret.py exe klasörüne girmiş")
+
+    # --- duman testleri (dondurulmuş paket gerçekten açılıyor mu?) ---
+    if not hatalar and not hizli:
+        print("▶ duman testleri: --help ve --kendini-sina …")
+        sonuc = subprocess.run([str(cli_exe), "--help"],
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace",
+                               timeout=180)
+        if sonuc.returncode != 0:
+            hatalar.append(f"rakip-takip.exe --help → çıkış {sonuc.returncode}")
+        sonuc = subprocess.run([str(gui_exe), "--kendini-sina"],
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace",
+                               timeout=180)
+        if sonuc.returncode != 0:
+            hatalar.append(
+                "RakipFiyatBot.exe --kendini-sina → çıkış "
+                f"{sonuc.returncode}: {(sonuc.stdout or sonuc.stderr or '')[-400:]}")
+
+    print(f"\nExe paketi: {hedef}")
+    print(f"  · {len(list(hedef.glob('*')))} dosya, "
+          f"toplam {sum(f.stat().st_size for f in hedef.rglob('*') if f.is_file()) // (1024 * 1024)} MB")
+    if hatalar:
+        print("\n✗ DENETIM BAŞARISIZ — .exe paketi SATILMAZ:")
+        for hata in hatalar:
+            print(f"   - {hata}")
+        sys.exit(1)
+    print("✓ Derleme + duman testleri temiz.")
+
+    if zip_dahil:
+        arsiv_yol = dist / f"rakip-fiyat-botu-{surum}-exe.zip"
+        if arsiv_yol.exists():
+            arsiv_yol.unlink()
+        arsivle(hedef, arsiv_yol)
+        print(f"✓ Arşiv: {arsiv_yol} "
+              f"({arsiv_yol.stat().st_size // 1024} KB)")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Dağıtım paketi üret")
     p.add_argument("--zip", action="store_true", help=".zip arşivi de üret")
+    p.add_argument("--exe", action="store_true",
+                   help="PyInstaller ile .exe paketi üret (GUI + CLI)")
+    p.add_argument("--exe-hizli", action="store_true",
+                   help="exe duman testlerini atla (hızlı derleme)")
     p.add_argument("--temizle", action="store_true",
                    help="dist/ klasörünü sil ve çık")
     args = p.parse_args()
@@ -230,6 +336,10 @@ def main() -> None:
         if dist.exists():
             shutil.rmtree(dist)
             print("dist/ silindi.")
+        return
+
+    if args.exe:
+        exe_uret(zip_dahil=args.zip, hizli=args.exe_hizli)
         return
 
     surum = surum_bul()

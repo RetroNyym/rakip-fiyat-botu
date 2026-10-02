@@ -85,3 +85,4 @@ data/lisans_kayitlari.json
 
 # --- Paketleme çıktısı ---
 dist/
+*.spec

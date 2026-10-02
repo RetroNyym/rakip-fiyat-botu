@@ -28,6 +28,7 @@ import csv
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -70,14 +71,24 @@ import lisans
 # ==========================================================================
 #  Rakip Radar (pazaryeri-radar) yardımcıları
 # ==========================================================================
+def _radar_tabanlari() -> list[Path]:
+    """Radar klasörlerinin aranacağı tabanlar (dondurulmuşta exe yanı)."""
+    tabanlar: list[Path] = []
+    if getattr(sys, "frozen", False):
+        exe_kok = Path(sys.executable).resolve().parent
+        tabanlar += [exe_kok, exe_kok.parent]
+    kendi = Path(__file__).resolve().parent
+    tabanlar += [kendi, kendi.parent]
+    return list(dict.fromkeys(tabanlar))               # tekilsiz, sıra korunur
+
+
 def radar_kok_bul() -> Path:
     """pazaryeri-radar proje kökünü bulur (yanında ya da üst klasörde)."""
-    kendi = Path(__file__).resolve().parent
-    for taban in (kendi, kendi.parent):
+    for taban in _radar_tabanlari():
         aday = taban / "pazaryeri-radar"
         if (aday / "radar").is_dir():
             return aday
-    return kendi / "pazaryeri-radar"
+    return _radar_tabanlari()[0] / "pazaryeri-radar"
 
 
 def radar_python_bul(kok: Path) -> Path:
@@ -86,17 +97,21 @@ def radar_python_bul(kok: Path) -> Path:
                  kok / ".venv" / "bin" / "python"):
         if aday.exists():
             return aday
+    if getattr(sys, "frozen", False):
+        # Dondurulmuş exe'de kendi Python'u yok → PATH'te kurulu olanı dene.
+        bulunan = shutil.which("python") or shutil.which("python3")
+        if bulunan:
+            return Path(bulunan)
     return Path(sys.executable)
 
 
 def ithalat_kok_bul() -> Path:
     """ithalat-radar proje kökünü bulur (yanında ya da üst klasörde)."""
-    kendi = Path(__file__).resolve().parent
-    for taban in (kendi, kendi.parent):
+    for taban in _radar_tabanlari():
         aday = taban / "ithalat-radar"
         if (aday / "ithalat").is_dir():
             return aday
-    return kendi / "ithalat-radar"
+    return _radar_tabanlari()[0] / "ithalat-radar"
 
 
 # ==========================================================================
@@ -3218,7 +3233,7 @@ class Uygulama(tk.Tk):
         if json_yol.exists():
             json_yol.unlink()
 
-        komut = [sys.executable, "-m", "ithalat", *komutlar,
+        komut = [str(radar_python_bul(kok)), "-m", "ithalat", *komutlar,
                  "--json", str(json_yol)]
 
         self.ithalat_suriyor = True
@@ -3921,7 +3936,47 @@ class Uygulama(tk.Tk):
         self.destroy()
 
 
+def kendini_sina() -> int:
+    """``--kendini-sina``: arayüzü açmadan paketin bağımlılıklarını sınar.
+
+    PyInstaller .exe ile ``RakipFiyatBot.exe --kendini-sina`` çalıştırılır;
+    gizli import eksikse (bs4/PIL/matplotlib…) burada düşer, GUI açılmaz.
+    Konsolsuz (``--windowed``) pakette stdout olmayabilir → yazışlar sessizce
+    yutulur, dönüş kodu anlamlıdır.
+    """
+    import importlib
+    eksik: list[str] = []
+    for ad in ("bs4", "requests", "cryptography", "sqlite3"):
+        try:
+            importlib.import_module(ad)
+        except Exception as hata:                        # noqa: BLE001
+            eksik.append(f"{ad}: {hata}")
+    opsiyonel: list[str] = []
+    for ad in ("PIL", "matplotlib"):
+        try:
+            importlib.import_module(ad)
+        except Exception:                                # noqa: BLE001
+            opsiyonel.append(ad)                         # görsel/grafik yok
+    try:
+        kok = tk.Tk()
+        kok.withdraw()
+        kok.update()
+        kok.destroy()
+    except Exception as hata:                            # noqa: BLE001
+        eksik.append(f"tkinter: {hata}")
+    mesaj = ("EKSIK: " + " | ".join(eksik)) if eksik else (
+        "OK: bs4, requests, cryptography, sqlite3, tkinter"
+        + (f"  (opsiyonel yok: {', '.join(opsiyonel)})" if opsiyonel else ""))
+    try:
+        print(mesaj)
+    except Exception:                                    # noqa: BLE001
+        pass
+    return 1 if eksik else 0
+
+
 def main():
+    if "--kendini-sina" in sys.argv:
+        sys.exit(kendini_sina())
     try:
         app = Uygulama()
     except TclError as hata:

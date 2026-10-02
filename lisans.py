@@ -29,6 +29,8 @@ import re
 import sys
 from pathlib import Path
 
+from kok_yol import veri_kok
+
 try:
     from cryptography.exceptions import InvalidSignature
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -56,7 +58,7 @@ _GENEL_ANAHTAR = bytes.fromhex(
 _SAYAC_ANAHTARI = bytes.fromhex(
     "b7e0f3a1c95d4e8276af0b13c5d8e94216f7a05b3c8d214e6fa9b7c05d3e8f16")
 
-_KOK = Path(__file__).resolve().parent
+_KOK = veri_kok(__file__)
 LIMIT_YOL = _KOK / "data" / "limit.json"
 
 
@@ -78,20 +80,43 @@ IC_ORTAM = "RIYA_IC"
 # --------------------------------------------------------------------------
 #  Test modu (yalnızca gerçek test çalıştırıcısı)
 # --------------------------------------------------------------------------
+def _calistirici_kaniti() -> bool:
+    """Gerçek bir test çalıştırıcısının **çalıştığına** dair kanıt.
+
+    ``sys.modules``'e sahte bir ``pytest.py``/``unittest`` sokmak yetmez;
+    kanıt çalıştırıcının kendisinin koyduğu izlerdir:
+
+    * ``PYTEST_CURRENT_TEST`` — pytest her test sırasında kurar ve siler;
+    * ``argv[0]`` — ``python -m unittest`` → ``…/unittest/__main__.py`` ya
+      da ``python test_….py`` (doğrudan test dosyası).
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    argv0 = (sys.argv[0] or "").replace("\\", "/").lower()
+    if argv0.endswith("unittest/__main__.py"):          # Linux/mac
+        return True
+    if "-m unittest" in argv0:                          # Windows: "python.exe -m unittest"
+        return True
+    if "-m pytest" in argv0:
+        return True
+    ad = argv0.rsplit("/", 1)[-1]
+    return ad.startswith("test_") and ad.endswith(".py")
+
+
 def test_mi() -> bool:
-    """``RIYA_TESTI=1`` yalnızca test çalıştırıcısı altında geçerlidir.
+    """``RIYA_TESTI=1`` yalnızca gerçek test çalıştırıcısı altında geçerlidir.
 
     Boşluk: ortam değişkenini alan kullanıcı deneme sınırını aşamasın diye
-    test bayrağı tek başına yeterli değildir; pytest/unittest modülünün
-    yüklü olması veya CI ortamı gerekir.
+    test bayrağı tek başına yeterli değildir; ayrıca test çalıştırıcısının
+    **çalıştığına dair kanıt** (``_calistirici_kaniti``) veya CI ortamı
+    gerekir.
     """
     if os.environ.get("RIYA_TESTI") != "1":
         return False
-    return (
-        "pytest" in sys.modules
-        or "unittest" in sys.modules
-        or bool(os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"))
-    )
+    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+        return True
+    return _calistirici_kaniti()
+
 
 
 def ic_cagri() -> bool:
@@ -201,16 +226,30 @@ def hak_oku(yol: Path | str | None = None) -> int:
 
 
 def hak_yaz(hak: int, yol: Path | str | None = None) -> None:
-    """Sayaçı mühürleyerek yazar (ana dosya + ayna)."""
+    """Sayaçı mühürleyerek yazar (ana dosya + ayna).
+
+    Ana dosya yazılamazsa (ör. ``exe`` Program Files'ta) aynaya düşülür;
+    ikisi de başarısızsa hata **yükselir** — sessizce kayıp, demek
+    sınırsız kullanım demek olurdu.
+    """
     hedef = _yol(yol)
-    _tek_yaz(hedef, int(hak))
+    hata: OSError | None = None
+    try:
+        _tek_yaz(hedef, int(hak))
+    except OSError as exc:
+        if yol is not None:
+            raise
+        hata = exc
     if yol is None:
         ayna = Path(AYNA_YOL)
         if ayna != hedef:
             try:
                 _tek_yaz(ayna, int(hak))
+                hata = None
             except OSError:
                 pass                                    # ayna yazılamadı
+    if hata is not None:
+        raise hata
 
 
 def hak_kalan(yol: Path | str | None = None) -> int:
@@ -227,6 +266,42 @@ def hak_tuket(yol: Path | str | None = None) -> bool:
     return True
 
 
-def hak_sifirla(yol: Path | str | None = None) -> None:
-    """Sayaç sıfırlar (satıcı/destek amaçlı; lisanslı kullanıcıya gerek yok)."""
+def sifirlama_jetonu_gecerli(jeton: object) -> bool:
+    """Satıcının ürettiği sıfırlama jetonu: ``SIFIRLA-<nonce>-<imza>``.
+
+    İmza Ed25519 ile **özel anahtar** atılır; özel anahtar dağıtılan
+    pakette yoktur → müşteri ``hak_sifirla``'yı kendi başına çağıramaz.
+    """
+    if not KRIPTO_VAR or not isinstance(jeton, str):
+        return False
+    parcalar = jeton.strip().upper().split("-")
+    if len(parcalar) != 3 or parcalar[0] != "SIFIRLA":
+        return False
+    nonce, imza = parcalar[1], parcalar[2]
+    if not re.fullmatch(r"[0-9A-F]{16}", nonce):
+        return False
+    if not re.fullmatch(f"{_BASE32}{{{_IMZA_UZUNLUK}}}", imza):
+        return False
+    ham = _b32coz(imza)
+    if ham is None or len(ham) != 64:
+        return False
+    try:
+        Ed25519PublicKey.from_public_bytes(_GENEL_ANAHTAR).verify(
+            ham, f"{ANAHTAR_ONEK}|SIFIRLA|{nonce}".encode("utf-8"))
+    except (InvalidSignature, ValueError):
+        return False
+    return True
+
+
+def hak_sifirla(yol: Path | str | None = None,
+                jeton: str | None = None) -> bool:
+    """Sayaç sıfırlar — test modunda veya geçerli satıcı jetonuyla.
+
+    Dağıtılan kodda jeton üretilemez (özel anahtar ``lisans_uret.py``'de
+    kalır); aksi hâlde müşteri ``lisans.hak_sifirla()`` ile deneme hakkını
+    tek satırla sıfırlayabilirdi. ``False`` = yetki yok, sayaç değişmedi.
+    """
+    if not (test_mi() or sifirlama_jetonu_gecerli(jeton)):
+        return False
     hak_yaz(0, yol)
+    return True

@@ -44,6 +44,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import lisans
+from kok_yol import veri_kok
 from urllib import robotparser
 from urllib.parse import urljoin, urlparse
 
@@ -62,7 +63,7 @@ try:
 except Exception:                                       # noqa: BLE001
     pass
 
-KOK = Path(__file__).resolve().parent
+KOK = veri_kok(__file__)
 VARSAYILAN_CONFIG = KOK / "config.json"
 DB_YOL = KOK / "fiyatlar.db"
 
@@ -834,12 +835,18 @@ CIKIS_LISANS = 4          # deneme hakkı doldu / lisans gerekli
 
 
 def _hak_al(config: dict, islem: str) -> bool:
-    """CLI için deneme hakkı harcar; lisanslıysa/test/iç çağrıda ödemez.
+    """CLI için deneme hakkı harcar; lisanslıysa/test'te ödemez.
 
     GUI'deki ``_hak_tuket`` ile aynı kural: işlem başına 1 hak. Hak bittiyse
     ``False`` döner; çağıran ``CIKIS_LISANS`` ile çıkar.
+
+    ⚠️ ``lisans.ic_cagri()`` (``RIYA_IC=1``) **dikkate alınmaz**: CLI hiçbir
+    zaman ücreti ödenmiş bir iç çağrı olarak çalışmaz — GUI ``rakip_takip.py``'yi
+    asla bu bayrakla çağırmaz. Dengelenmezse kullanıcı ``RIYA_IC=1`` ile
+    sınırı rahatça aşabilirdi. (İç çağrı sinyali yalnızca radar/ithalat alt
+    süreçlerinde geçerlidir; onları GUI önceden öder.)
     """
-    if lisans.test_mi() or lisans.ic_cagri():
+    if lisans.test_mi():
         return True
     if lisans.anahtar_gecerli(config.get("lisans") or ""):
         return True
@@ -870,7 +877,25 @@ def main() -> None:
     p.add_argument("--lisans", metavar="ANAHTAR",
                    help="Lisans anahtarını doğrula ve config'e kaydet "
                         "(RN1-…)")
+    p.add_argument("--sifirla", metavar="JETON",
+                   help="Deneme hakkı sayacını satıcı jetonuyla sıfırla "
+                        "(üretimi: python lisans_uret.py --sifirla-jetonu)")
     args = p.parse_args()
+
+    if args.sifirla is not None:
+        # Config'ten bağımsız: bozuk config varsa da sayaç sıfırlanabilsin.
+        try:
+            ok = lisans.hak_sifirla(jeton=args.sifirla.strip())
+        except OSError as hata:
+            print(f"✖ Sayaç sıfırlanamadı: {hata}")
+            sys.exit(1)
+        if not ok:
+            print("✖ Geçersiz sıfırlama jetonu (imza doğrulanamadı).")
+            sys.exit(1)
+        print(f"✔ Deneme hakkı sayacı sıfırlandı — "
+              f"kalan {lisans.hak_kalan()} hak.")
+        if not (args.rapor or args.inspect or args.test):
+            return
 
     try:
         config = config_oku(args.config)

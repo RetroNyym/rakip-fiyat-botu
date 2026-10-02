@@ -76,6 +76,22 @@ pip install Pillow matplotlib
 
 Python **3.10+** gerekir.
 
+### Windows'ta Python gerekmeden (.exe)
+
+Müşteriye Python kurulumu yaptırmak istemiyorsanız hazır `.exe` dağıtımı
+kullanın (`dist/rakip-fiyat-botu-<sürüm>-exe/`):
+
+- `RakipFiyatBot.exe` — arayüz (konsolsuz)
+- `rakip-takip.exe` — komut satırı (konsollu)
+
+Taşınabilir klasörün tamamı tek yerden çalışır: `config.json`, `data/`,
+`fiyatlar.db` **exe'nin yanında** oluşur. Hak sayacının ikinci kopyası ayrıca
+`%APPDATA%\RakipFiyatBot\limit.json`'dadır (ana dosya silinse kurtarır).
+
+> ⚠️ Klasörü `Program Files` altına **koymayın**: orası yazmaya kapalıdır ve
+> config/db dosyaları exe'nin yanına yazılamaz. `C:\RakipFiyatBot` gibi
+> yazılabilir bir dizin kullanın.
+
 ---
 
 ## ▶ Çalıştırma / Usage
@@ -297,6 +313,25 @@ python lisans_uret.py --dogrula RN1-…
   konmaz. Repo public olduğu için dosya takipten çıkarılmıştır; unutursanız
   `paketle.py` denetimi hatayı verir.
 
+### Deneme hakkını sıfırlama
+
+Müşterinin deneme hakkı bittiyse tek kullanımlık jeton üretip destek
+kanalından gönderirsiniz:
+
+```powershell
+# satıcı makinesinde (özel anahtar sizde):
+python lisans_uret.py --sifirla-jetonu
+#   → SIFIRLA-<16 hex nonce>-<103 karakter imza>
+
+# müşteri makinesinde (veya .exe ile aynı):
+python rakip_takip.py --sifirla SIFIRLA-…
+#   ✔ Deneme hakkı sayacı sıfırlandı — kalan 5 hak.
+```
+
+Jeton Ed25519 ile imzalanır; özel anahtar dağıtılan pakette bulunmadığı için
+**müşteri kendi sayacını sıfırlayamaz** (`lisans.hak_sifirla()` jetonsuz
+`False` döner). Geçersiz jetonda CLI çıkış `1` verir ve sayaç değişmez.
+
 ### Dağıtım paketi
 
 ```powershell
@@ -308,6 +343,28 @@ Denetim şunları kontrol eder: gizli değer sızıntısı (anahtar/token),
 `lisans_uret.py`'nin git takibinde olmaması, gerekli dosyaların paket
 içinde bulunması, hariç tutulanların (`config.json`, `fiyatlar.db`,
 `test_*.py`, `.git/`) dışarıda kalması.
+
+**Windows `.exe` paketi (Python gerekmez):**
+
+```powershell
+pip install -r requirements.txt -r requirements.gelistirme.txt  # pyinstaller dahil
+python paketle.py --exe --zip
+```
+
+`dist/rakip-fiyat-botu-<sürüm>-exe/` klasörü üretilir: `RakipFiyatBot.exe`
+(arayüz), `rakip-takip.exe` (komut satırı) + `config.ornek.json`,
+`KULLANIM.md`, `README.md`, `LICENSE`, `baslat.bat`.
+
+Her derlemeden sonra paket **kendi kendini sınar** ve hata varsa çıkış `1`
+ile biter (paket SATILMAZ):
+
+- iki `.exe` de var mı, boyut makul mü (< 5 MB ise şüpheli),
+- `lisans_uret.py` sızmış mı,
+- duman testleri: `rakip-takip.exe --help` ve
+  `RakipFiyatBot.exe --kendini-sina` (dondurulmuş pakette bs4/PIL/matplotlib
+  gibi gizli import eksikse arayüz açılmadan burada düşer).
+
+`--exe-hizli` duman testlerini atlar (yalnızca geliştirirken).
 
 ### Otomatik anahtar teslimi (Polar.sh)
 

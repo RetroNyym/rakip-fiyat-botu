@@ -367,53 +367,145 @@ class TestModuTesti(unittest.TestCase):
             os.environ["RIYA_TESTI"] = self._eski
 
     @staticmethod
-    def _calistiricisiz():
-        """sys.modules'ten test çalıştırıcılarını geçici olarak söker."""
-        return (sys.modules.pop("unittest", None),
-                sys.modules.pop("pytest", None))
+    def _kanitsiz():
+        """Test çalıştırıcısı kanıtlarını (env + argv[0]) geçici olarak söker.
+
+        Önce ``patch.dict``'i başlatır (çıkışta her şeyi geri koyar), sonra
+        siler — aksi hâlde ``CI``/``PYTEST_CURRENT_TEST`` kalıcı giderdi.
+        """
+        env = mock.patch.dict(os.environ, {}, clear=False)
+        env.start()
+        os.environ.pop("PYTEST_CURRENT_TEST", None)
+        os.environ.pop("CI", None)
+        os.environ.pop("GITHUB_ACTIONS", None)
+        argv = mock.patch.object(sys, "argv",
+                                 ["C:/uygulama/RakipFiyatBot.exe"])
+        argv.start()
+        return [env, argv]
 
     @staticmethod
-    def _calistirici_kur(unittest_mod, pytest_mod):
-        if unittest_mod is not None:
-            sys.modules["unittest"] = unittest_mod
-        if pytest_mod is not None:
-            sys.modules["pytest"] = pytest_mod
+    def _kanit_kur(yamalar):
+        for y in yamalar:
+            y.stop()
 
-    def test_calistirici_varken_acik(self):
-        self.assertTrue(lisans.test_mi())
+    def test_pytest_kaniti_varken_acik(self):
+        """pytest her test sırasında kurduğu iz test modunu açar."""
+        with mock.patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "a (call)"}):
+            self.assertTrue(lisans.test_mi())
 
-    def test_calistirici_yokken_kapali(self):
-        unittest_mod, pytest_mod = self._calistiricisiz()
-        ci = os.environ.pop("CI", None)
-        gha = os.environ.pop("GITHUB_ACTIONS", None)
+    def test_kanit_yokken_kapali(self):
+        """RIYA_TESTI=1 + kanıt yok → kapalı (rağbet engeli)."""
+        yamalar = self._kanitsiz()
         try:
-            self.assertNotIn("unittest", sys.modules)
-            self.assertNotIn("pytest", sys.modules)
-            self.assertFalse(lisans.test_mi())     # RIYA_TESTI=1 olsa bile
+            self.assertFalse(lisans.test_mi())
         finally:
-            self._calistirici_kur(unittest_mod, pytest_mod)
-            if ci is not None:
-                os.environ["CI"] = ci
-            if gha is not None:
-                os.environ["GITHUB_ACTIONS"] = gha
+            self._kanit_kur(yamalar)
+
+    def test_sahte_pytest_modulu_yetmez(self):
+        """sys.modules'e sahte ``pytest`` sokmak test modunu açamaz."""
+        import types
+        onceki = sys.modules.get("pytest")
+        sys.modules["pytest"] = types.ModuleType("pytest")
+        yamalar = self._kanitsiz()
+        try:
+            self.assertNotIn("PYTEST_CURRENT_TEST", os.environ)
+            self.assertFalse(lisans.test_mi())
+        finally:
+            self._kanit_kur(yamalar)
+            if onceki is None:
+                sys.modules.pop("pytest", None)
+            else:
+                sys.modules["pytest"] = onceki
+
+    def test_sahte_unittest_importu_yetmez(self):
+        """Sadece ``import unittest`` yapmak (herkeste var) yetmez."""
+        import unittest as _u                      # noqa: F401
+        yamalar = self._kanitsiz()
+        try:
+            self.assertIn("unittest", sys.modules)
+            self.assertFalse(lisans.test_mi())
+        finally:
+            self._kanit_kur(yamalar)
+
+    def test_unittest_argv0_kaniti(self):
+        """``python -m unittest`` argv[0] izi test modunu açar."""
+        with mock.patch.object(
+                sys, "argv",
+                ["C:/Python314/Lib/unittest/__main__.py", "discover"]):
+            self.assertTrue(lisans.test_mi())
+        with mock.patch.object(sys, "argv", ["/opt/py/test_lisans.py"]):
+            self.assertTrue(lisans.test_mi())
 
     def test_riya_yoksa_kapali(self):
         os.environ.pop("RIYA_TESTI", None)
         self.assertFalse(lisans.test_mi())
 
-    def test_ci_ortaminda_calistirici_gerekmez(self):
-        unittest_mod, pytest_mod = self._calistiricisiz()
+    def test_ci_ortaminda_kanit_gerekmez(self):
+        yamalar = self._kanitsiz()
         try:
             with mock.patch.dict(os.environ, {"CI": "1"}):
                 self.assertTrue(lisans.test_mi())
         finally:
-            self._calistirici_kur(unittest_mod, pytest_mod)
+            self._kanit_kur(yamalar)
 
     def test_ic_cagri_ortam_degiskeni(self):
         with mock.patch.dict(os.environ, {"RIYA_IC": "1"}):
             self.assertTrue(lisans.ic_cagri())
         os.environ.pop("RIYA_IC", None)
         self.assertFalse(lisans.ic_cagri())
+
+
+class SifirlamaJetonuTesti(unittest.TestCase):
+    """``hak_sifirla`` dağıtılan kodla çağrılamaz (jeton Ed25519 imzalı)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        kok = Path(self._tmp.name)
+        self._limit = kok / "limit.json"
+        self._ayna = kok / "ayna" / "limit.json"
+        self._eski = (lisans.LIMIT_YOL, lisans.AYNA_YOL)
+        lisans.LIMIT_YOL, lisans.AYNA_YOL = self._limit, self._ayna
+        lisans.hak_yaz(3)                               # 3 hak harcanmış
+
+    def tearDown(self):
+        lisans.LIMIT_YOL, lisans.AYNA_YOL = self._eski
+        self._tmp.cleanup()
+        os.environ["RIYA_TESTI"] = "1"
+
+    @staticmethod
+    def _gercek_mod():
+        return mock.patch.dict(os.environ, {}, clear=True)   # RIYA_TESTI gider
+
+    def test_jetonsuz_sifirlanamaz(self):
+        with self._gercek_mod():
+            self.assertFalse(lisans.hak_sifirla())
+        self.assertEqual(lisans.hak_oku(), 3)          # sayaç olduğu gibi
+
+    def test_sahte_jeton_sifirlamaz(self):
+        sahte = "SIFIRLA-0123456789ABCDEF-" + "A" * 103
+        with self._gercek_mod():
+            self.assertFalse(lisans.hak_sifirla(jeton=sahte))
+        self.assertEqual(lisans.hak_oku(), 3)
+
+    def test_yanlis_biimli_jetonlar(self):
+        for jeton in ("", "RN1-00000000-" + "A" * 103, "SIFIRLA-kucuk-" + "A" * 103,
+                      "SIFIRLA-0123456789ABCDEF-" + "A" * 102,
+                      "SIFIRLA-0123456789ABCDEF-" + "1" * 103):
+            with self._gercek_mod():
+                self.assertFalse(lisans.sifirlama_jetonu_gecerli(jeton))
+
+    def test_gercek_jeton_sifirlar(self):
+        nonce = "FEEDFACE12345678"
+        jeton = f"SIFIRLA-{nonce}-{_imza(f'SIFIRLA|{nonce}')}"
+        self.assertTrue(lisans.sifirlama_jetonu_gecerli(jeton))
+        with self._gercek_mod():
+            self.assertTrue(lisans.hak_sifirla(jeton=jeton))
+        self.assertEqual(lisans.hak_oku(), 0)
+
+    def test_test_modunda_jeton_gerekmez(self):
+        os.environ["RIYA_TESTI"] = "1"
+        self.assertTrue(lisans.hak_sifirla())
+        self.assertEqual(lisans.hak_oku(), 0)
 
     def test_ayar_izinli(self):
         anahtar = anahtar_uret()
@@ -456,13 +548,28 @@ class CliLisansTesti(unittest.TestCase):
                                encoding="utf-8")
 
     def _calistir(self, *arglar):
+        # argv[0]'ı bozmuyoruz: lisans.test_mi() koşucu kanıtını argv[0]'dan
+        # okur (pytest ayrıca PYTEST_CURRENT_TEST ortam değişkenini kurar).
         with mock.patch.object(sys, "argv",
-                               ["rakip_takip.py", "--config",
+                               [sys.argv[0], "--config",
                                 str(self.config), *arglar]):
             cekirdek.main()
 
     def _gercek_mod(self):
         os.environ.pop("RIYA_TESTI", None)
+
+    def test_riya_ic_ile_ucretsiz_gecilemez(self):
+        """CLI ``RIYA_IC=1``i dikkate almaz → hak yine harcanır.
+
+        (GUI ``rakip_takip.py``'yi hiç bu bayrakla çağırmaz; dikkate
+        alınsaydı kullanıcı tek satırla sınırı aşabilirdi.)
+        """
+        with mock.patch.dict(os.environ, {"RIYA_IC": "1"}, clear=True):
+            self.assertTrue(cekirdek._hak_al({}, "Tarama"))
+        self.assertEqual(lisans.hak_oku(), 1)     # atlamadı, harcadı
+        with mock.patch.dict(os.environ, {"RIYA_IC": "1"}, clear=True):
+            self.assertTrue(cekirdek._hak_al({}, "Tarama"))
+        self.assertEqual(lisans.hak_oku(), 2)
 
     def test_lisans_kaydedilir_ve_tarama_baslamaz(self):
         anahtar = anahtar_uret()
@@ -490,6 +597,36 @@ class CliLisansTesti(unittest.TestCase):
             tarama.assert_not_called()
         finally:
             os.environ["RIYA_TESTI"] = "1"
+
+    def _sifirla_calistir(self, jeton: str) -> None:
+        """``--sifirla``'yı üretim kanıtsız (gerçek kullanıcı modu) çalıştırır."""
+        yamalar = TestModuTesti._kanitsiz()
+        try:
+            self._calistir("--sifirla", jeton)
+        finally:
+            TestModuTesti._kanit_kur(yamalar)
+
+    def test_sifirla_gercek_jetonda_sifirlar(self):
+        """Satıcı jetonu test kanıtı olmadan da sayacı sıfırlar."""
+        lisans.hak_yaz(5)
+        nonce = "AABBCCDDEEFF0011"
+        jeton = f"SIFIRLA-{nonce}-{_imza(f'SIFIRLA|{nonce}')}"
+        self._sifirla_calistir(jeton)
+        self.assertEqual(lisans.hak_oku(), 0)
+        self.assertEqual(lisans.hak_kalan(), lisans.HAK_SINIRI)
+
+    def test_sifirla_jetonsuz_cikis_kodu_1(self):
+        """Geçersiz jeton → çıkış 1, sayaç olduğu gibi kalır."""
+        lisans.hak_yaz(5)
+        sahte = "SIFIRLA-0123456789ABCDEF-" + "A" * 103
+        yamalar = TestModuTesti._kanitsiz()
+        try:
+            with self.assertRaises(SystemExit) as hata:
+                self._calistir("--sifirla", sahte)
+        finally:
+            TestModuTesti._kanit_kur(yamalar)
+        self.assertEqual(hata.exception.code, 1)
+        self.assertEqual(lisans.hak_oku(), 5)
 
     def test_tarama_bir_hak_harcar(self):
         self._gercek_mod()
