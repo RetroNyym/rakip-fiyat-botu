@@ -9,6 +9,7 @@ Ne yapar:
   1. Depo içeriğini ``dist/`` altına, **izin listesi** ile kopyalar.
   2. Asla gitmemesi gereken dosyaları denetler:
        · ``lisans_uret.py``      → özel (imzalama) anahtarı taşır
+       · ``anahtar_servisi.py``  → satıcı webhook servisi (Polar)
        · ``paketle.py``          → satıcı aracı
        · ``test_*.py``           → test paketi
        · ``config.json``, ``fiyatlar.db``, ``data/``, ``.git/``
@@ -41,6 +42,7 @@ KOK = Path(__file__).resolve().parent
 # Pakete girmeyecek dosya/klasör adları (tüm seviyelerde)
 HARIC_AD = {
     "lisans_uret.py",          # ✗ özel lisans anahtarı
+    "anahtar_servisi.py",      # ✗ satıcı webhook servisi (Polar → anahtar)
     "paketle.py",              # ✗ satıcı aracı
     "config.json",             # ✗ kişisel ayar + lisans
     "fiyatlar.db",             # ✗ fiyat geçmişi
@@ -94,7 +96,7 @@ def gizli_degerler() -> dict[str, str]:
         degerler["lisans özel (imzalama) anahtarı"] = \
             lisans_uret._OZEL_ANAHTAR.hex()
     except Exception:                                   # noqa: BLE001
-        pass
+        print("⚠  lisans_uret.py okunamadı → gizli anahtar taraması ATLANDI")
     return degerler
 
 

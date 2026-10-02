@@ -309,6 +309,33 @@ Denetim şunları kontrol eder: gizli değer sızıntısı (anahtar/token),
 içinde bulunması, hariç tutulanların (`config.json`, `fiyatlar.db`,
 `test_*.py`, `.git/`) dışarıda kalması.
 
+### Otomatik anahtar teslimi (Polar.sh)
+
+Anahtarın elle yazılmaması için `anahtar_servisi.py` Polar webhook'unu alır,
+**Standard Webhooks / Svix** imzasını doğrular, `lisans_uret.py` ile anahtar
+üretip `data/lisans_kayitlari.json`'a yazar.
+
+```powershell
+set POLAR_WEBHOOK_SECRET=whsec_...
+python anahtar_servisi.py --kontrol     # önce kendi kendini sınaire
+python anahtar_servisi.py --port 8080   # dinlemeye başla
+```
+
+| Uç | Ne yapar |
+|---|---|
+| `POST /webhook` | İmza doğrula → anahtar üret (**202**); imzasız → **403** |
+| `GET /lisans?eposta=…` | Sipariş e-postasıyla anahtar sorgula |
+| `GET /health` | Sağlık kontrolü |
+
+- Aynı sipariş ikinci kez gelirse **aynı anahtar** döner (idempotent),
+  farklı sipariş farklı anahtar alır.
+- SMTP tanımlıysa (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`,
+  `MAIL_FROM`) anahtar müşteriye e-posta ile gider; tanımlı değilse
+  indirme/destek sayfanıza `GET /lisans?eposta=…` linki koymanız yeterli.
+- Polar tarafı: **Dashboard → Webhooks →** `https://<sunucu>/webhook`,
+  olay `order.created`, format **Raw**. Sunucu HTTPS arkasında olmalı
+  (Cloudflare Tunnel, ngrok veya nginx ters vekil).
+
 ---
 
 ## 📄 Lisans / License

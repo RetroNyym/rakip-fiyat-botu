@@ -39,7 +39,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 _TEST_OZEL_ANAHTAR = Ed25519PrivateKey.generate()
-lisans._GENEL_ANAHTAR = _TEST_OZEL_ANAHTAR.public_key().public_bytes(
+_TEST_GENEL_ANAHTAR = _TEST_OZEL_ANAHTAR.public_key().public_bytes(
     serialization.Encoding.Raw, serialization.PublicFormat.Raw)
 
 
@@ -54,6 +54,16 @@ def anahtar_uret(govde: str | None = None) -> str:
     if govde is None:
         govde = secrets.token_hex(lisans._GOVDE_UZUNLUK // 2).upper()
     return f"{lisans.ANAHTAR_ONEK}-{govde}-{_imza(govde)}"
+
+
+def setUpModule():
+    """Genel anahtarı yalnızca bu modülün testleri boyunca değiştir.
+
+    Import anasında yapılıyordu; pytest/unittest tüm modülleri önce
+    topluca içe aktardığı için diğer test modülleri de (ör.
+    ``test_anahtar_servisi``) sahte anahtarla çalışıyordu.
+    """
+    lisans._GENEL_ANAHTAR = _TEST_GENEL_ANAHTAR
 
 
 def tearDownModule():

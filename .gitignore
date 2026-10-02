@@ -80,5 +80,8 @@ ithalat-radar/data/out/
 # (Depo public; dosya yerel kalır, paketle.py de takibi denetler.)
 lisans_uret.py
 
+# Sipariş → anahtar kayıtları (Polar webhook servisi, kişiseldir)
+data/lisans_kayitlari.json
+
 # --- Paketleme çıktısı ---
 dist/
