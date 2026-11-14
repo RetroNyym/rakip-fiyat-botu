@@ -215,7 +215,7 @@ def _cevrimdisi_lutuf(anahtar: str, onay: dict, hata: str) -> tuple[bool, str]:
     if (onay.get("anahtar") == _hash(anahtar)
             and onay.get("durum") == "gecerli"
             and isinstance(onay.get("son_onay"), (int, float))
-            and 0 < time.time() - float(onay["son_onay"]) < CEVRIM_DISI_GRACE):
+            and 0 <= time.time() - float(onay["son_onay"]) < CEVRIM_DISI_GRACE):
         return True, "çevrimdışı doğrulama (son Polar kontrolü taze)"
     return False, ("internet bağlantısı gerekli — "
                    f"Polar'a ulaşılamadı ({hata})")
