@@ -268,6 +268,7 @@ class HttpUcTesti(unittest.TestCase):
 
 
 class KendiniSinamaTesti(unittest.TestCase):
+    @unittest.skipUnless(URETIM_VAR, "lisans_uret.py yalnızca satıcı makinesinde")
     def test_kontrol_gecer(self):
         self.assertTrue(asrv.kendini_sina(GIZLI))
 

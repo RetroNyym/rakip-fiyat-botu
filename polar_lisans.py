@@ -207,7 +207,7 @@ def _taze_mi(anahtar: str, onay: dict) -> bool:
     return (onay.get("anahtar") == _hash(anahtar)
             and onay.get("durum") == "gecerli"
             and isinstance(onay.get("son_onay"), (int, float))
-            and 0 < time.time() - float(onay["son_onay"]) < ONAY_TAZE)
+            and 0 <= time.time() - float(onay["son_onay"]) < ONAY_TAZE)
 
 
 def _cevrimdisi_lutuf(anahtar: str, onay: dict, hata: str) -> tuple[bool, str]:
